@@ -41,6 +41,42 @@ func Test_parsePlayerName(t *testing.T) {
 	}
 }
 
+func Test_parseWordpack(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		value     string
+		wantKey   string
+		wantIsRTL bool
+		wantErr   bool
+	}{
+		{"exact lowercase", "english", "english", false, false},
+		{"exact mixed case name", "Persian_1", "Persian_1", true, false},
+		{"case insensitive canonicalized", "persian_1", "Persian_1", true, false},
+		{"trimmed", "  Persian_1  ", "Persian_1", true, false},
+		{"invalid", "does-not-exist", "", false, true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			data, gotKey, err := ParseWordpack(testCase.value)
+			if (err != nil) != testCase.wantErr {
+				t.Errorf("ParseWordpack() error = %v, wantErr %v", err, testCase.wantErr)
+				return
+			}
+			if gotKey != testCase.wantKey {
+				t.Errorf("ParseWordpack() key = %v, want %v", gotKey, testCase.wantKey)
+			}
+			if data.IsRtl != testCase.wantIsRTL {
+				t.Errorf("ParseWordpack() IsRtl = %v, want %v", data.IsRtl, testCase.wantIsRTL)
+			}
+		})
+	}
+}
+
 func Test_parseDrawingTime(t *testing.T) {
 	t.Parallel()
 

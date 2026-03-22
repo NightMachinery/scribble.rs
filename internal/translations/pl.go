@@ -49,7 +49,7 @@ func initPolishTranslation() {
 	translation.put("change-lobby-settings-title", "Ustawienia lobby")
 	translation.put("lobby-settings-changed", "Ustawienia lobby zostały zmienione")
 	translation.put("advanced-settings", "Ustawienia zaawansowane")
-	translation.put("word-language", "Język")
+	translation.put("word-pack", "Paczka słów")
 	translation.put("drawing-time-setting", "Czas rysowania")
 	translation.put("rounds-setting", "Rundy")
 	translation.put("max-players-setting", "Maksymalna ilośc graczy")

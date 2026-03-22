@@ -114,7 +114,8 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	}
 
 	scoreCalculation, scoreCalculationInvalid := ParseScoreCalculation(request.Form.Get("score_calculation"))
-	languageData, languageKey, languageInvalid := ParseLanguage(request.Form.Get("language"))
+	requestedWordpack := request.Form.Get("wordpack")
+	wordpackData, wordpackKey, wordpackInvalid := ParseWordpack(requestedWordpack)
 	drawingTime, drawingTimeInvalid := ParseDrawingTime(handler.cfg, request.Form.Get("drawing_time"))
 	rounds, roundsInvalid := ParseRounds(handler.cfg, request.Form.Get("rounds"))
 	maxPlayers, maxPlayersInvalid := ParseMaxPlayers(handler.cfg, request.Form.Get("max_players"))
@@ -128,18 +129,21 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	}
 
 	var lowercaser cases.Caser
-	if languageInvalid != nil {
+	if wordpackInvalid != nil {
 		lowercaser = cases.Lower(language.English)
 	} else {
-		lowercaser = languageData.Lowercaser()
+		lowercaser = wordpackData.Lowercaser()
 	}
 	customWords, customWordsInvalid := ParseCustomWords(lowercaser, request.Form.Get("custom_words"))
 
 	if scoreCalculationInvalid != nil {
 		requestErrors = append(requestErrors, scoreCalculationInvalid.Error())
 	}
-	if languageInvalid != nil {
-		requestErrors = append(requestErrors, languageInvalid.Error())
+	if request.Form.Get("language") != "" {
+		requestErrors = append(requestErrors, "the 'language' field is no longer supported, use 'wordpack' instead")
+	}
+	if wordpackInvalid != nil {
+		requestErrors = append(requestErrors, wordpackInvalid.Error())
 	}
 	if drawingTimeInvalid != nil {
 		requestErrors = append(requestErrors, drawingTimeInvalid.Error())
@@ -182,7 +186,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 		WordsPerTurn:       wordsPerTurn,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName,
-		languageKey, lobbySettings, customWords, scoreCalculation)
+		wordpackKey, lobbySettings, customWords, scoreCalculation)
 	if err != nil {
 		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
@@ -367,8 +371,11 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	if request.Form.Get("custom_words") != "" {
 		requestErrors = append(requestErrors, "can't modify custom_words in existing lobby")
 	}
+	if request.Form.Get("wordpack") != "" {
+		requestErrors = append(requestErrors, "can't modify wordpack in existing lobby")
+	}
 	if request.Form.Get("language") != "" {
-		requestErrors = append(requestErrors, "can't modify language in existing lobby")
+		requestErrors = append(requestErrors, "can't modify wordpack in existing lobby")
 	}
 
 	// Editable properties

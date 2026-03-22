@@ -22,7 +22,7 @@ type LobbySettingDefaults struct {
 	CustomWords        string `env:"CUSTOM_WORDS"`
 	CustomWordsPerTurn string `env:"CUSTOM_WORDS_PER_TURN"`
 	ClientsPerIPLimit  string `env:"CLIENTS_PER_IP_LIMIT"`
-	Language           string `env:"LANGUAGE"`
+	Wordpack           string `env:"WORDPACK"`
 	ScoreCalculation   string `env:"SCORE_CALCULATION"`
 	WordsPerTurn       string `env:"WORDS_PER_TURN"`
 }
@@ -85,7 +85,7 @@ var Default = Config{
 		MaxPlayers:         "24",
 		CustomWordsPerTurn: "3",
 		ClientsPerIPLimit:  "2",
-		Language:           "english",
+		Wordpack:           "english",
 		ScoreCalculation:   "chill",
 		WordsPerTurn:       "3",
 	},

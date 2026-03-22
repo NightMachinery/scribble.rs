@@ -56,7 +56,7 @@ func initFrenchTranslation() *Translation {
 	translation.put("chill-alt", "La rapidité est récompensée, mais ce n'est pas grave si vous êtes un peu plus lent.\nLe score de base est assez élevé, l'essentiel est de s'amuser !")
 	translation.put("competitive-alt", "Plus vous êtes rapide, plus vous gagnerez de points.\nLe score de base est bien plus bas et la baisse est plus rapide.")
 	translation.put("score-calculation", "Score")
-	translation.put("word-language", "Langue")
+	translation.put("word-pack", "Pack de mots")
 	translation.put("drawing-time-setting", "Temps de dessin")
 	translation.put("rounds-setting", "Manches")
 	translation.put("max-players-setting", "Joueurs maximum")

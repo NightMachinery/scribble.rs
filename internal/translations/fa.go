@@ -57,7 +57,7 @@ func initPersianTranslation() *Translation {
 	translation.put("chill-alt", "درسته که سریع بودن جایزه داره، اما حالا یه کم یواش‌ترم باشی خیلی بد نیست.\nامتیاز پایه نسبتا بالاتره، روی عشق و حال تمرکز کن!")
 	translation.put("competitive-alt", "هر چی سریع‌تر باشی، امتیاز بیشتری می‌گیری.\nامتیاز پایه خیلی پایین‌تره و سقوط سریع‌تره.")
 	translation.put("score-calculation", "امتیازدهی")
-	translation.put("word-language", "زبان واژه‌ها")
+	translation.put("word-pack", "بسته واژه‌ها")
 	translation.put("drawing-time-setting", "زمان نقاشی")
 	translation.put("rounds-setting", "دورها")
 	translation.put("max-players-setting", "بیشترین تعداد بازیکنان")

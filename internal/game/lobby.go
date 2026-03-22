@@ -25,7 +25,7 @@ var SupportedScoreCalculations = []string{
 	"competitive",
 }
 
-var SupportedLanguages = map[string]string{
+var SupportedWordpacks = map[string]string{
 	"english_gb": "English (GB)",
 	"english":    "English (US)",
 	"italian":    "Italian",
@@ -38,6 +38,7 @@ var SupportedLanguages = map[string]string{
 	"arabic":     "Arabic",
 	"hebrew":     "Hebrew",
 	"persian":    "Persian",
+	"Persian_1":  "Persian_1",
 }
 
 const (
@@ -1033,7 +1034,7 @@ func (lobby *Lobby) selectWord(index int) error {
 // optionally returns an error, if any occurred during creation.
 func CreateLobby(
 	desiredLobbyId string,
-	playerName, chosenLanguage string,
+	playerName, chosenWordpack string,
 	settings *EditableLobbySettings,
 	customWords []string,
 	scoringCalculation ScoreCalculation,
@@ -1056,16 +1057,16 @@ func CreateLobby(
 		})
 	}
 
-	lobby.Wordpack = chosenLanguage
+	lobby.Wordpack = chosenWordpack
 
 	// Necessary to correctly treat words from player, however, custom words
-	// might be treated incorrectly, as they might not be the same language as
-	// the one specified for the lobby. If for example you chose 100 french
-	// custom words, but keep english_us as the lobby language, the casing rules
-	// will most likely be faulty.
-	lobby.lowercaser = WordlistData[chosenLanguage].Lowercaser()
+	// might be treated incorrectly, as they might not be in the same language
+	// as the selected wordpack. If for example you chose 100 french custom
+	// words, but keep an english wordpack, the casing rules will most likely be
+	// faulty.
+	lobby.lowercaser = WordpackDataByName[chosenWordpack].Lowercaser()
 
-	lobby.IsWordpackRtl = WordlistData[chosenLanguage].IsRtl
+	lobby.IsWordpackRtl = WordpackDataByName[chosenWordpack].IsRtl
 
 	// customWords are lowercased afterwards, as they are direct user input.
 	if len(customWords) > 0 {

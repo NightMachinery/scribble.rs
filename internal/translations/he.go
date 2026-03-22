@@ -57,7 +57,7 @@ func initHebrewTranslation() {
 	translation.put("chill-alt", "למרות שמהירות מתוגמלת בניקוד גבוה יותר, זה לא נורא אם אתם קצת יותר איטיים.\nהציון הבסיסי גבוה יחסית, אז התמקדו בליהנות!")
 	translation.put("competitive-alt", "ככל שתהיו מהירים יותר, כך תקבלו יותר נקודות.\nהציון הבסיסי נמוך")
 	translation.put("score-calculation", "שיטת ניקוד")
-	translation.put("word-language", "שפה")
+	translation.put("word-pack", "חבילת מילים")
 	translation.put("drawing-time-setting", "זמן ציור")
 	translation.put("rounds-setting", "סיבובים")
 	translation.put("max-players-setting", "מספר שחקנים מקסימלי")

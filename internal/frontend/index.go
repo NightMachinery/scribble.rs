@@ -157,7 +157,8 @@ func (handler *SSRHandler) createDefaultIndexPageData() *IndexPageData {
 	return &IndexPageData{
 		BasePageConfig:       handler.basePageConfig,
 		SettingBounds:        handler.cfg.LobbySettingBounds,
-		Languages:            game.SupportedLanguages,
+		Wordpack:             handler.cfg.LobbySettingDefaults.Wordpack,
+		Wordpacks:            game.SupportedWordpacks,
 		ScoreCalculations:    game.SupportedScoreCalculations,
 		LobbySettingDefaults: handler.cfg.LobbySettingDefaults,
 	}
@@ -172,7 +173,8 @@ type IndexPageData struct {
 	Translation       *translations.Translation
 	Locale            string
 	Errors            []string
-	Languages         map[string]string
+	Wordpack          string
+	Wordpacks         map[string]string
 	ScoreCalculations []string
 }
 
@@ -185,7 +187,8 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	}
 
 	scoreCalculation, scoreCalculationInvalid := api.ParseScoreCalculation(request.Form.Get("score_calculation"))
-	languageData, languageKey, languageInvalid := api.ParseLanguage(request.Form.Get("language"))
+	requestedWordpack := request.Form.Get("wordpack")
+	wordpackData, wordpackKey, wordpackInvalid := api.ParseWordpack(requestedWordpack)
 	drawingTime, drawingTimeInvalid := api.ParseDrawingTime(handler.cfg, request.Form.Get("drawing_time"))
 	rounds, roundsInvalid := api.ParseRounds(handler.cfg, request.Form.Get("rounds"))
 	maxPlayers, maxPlayersInvalid := api.ParseMaxPlayers(handler.cfg, request.Form.Get("max_players"))
@@ -199,10 +202,10 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	}
 
 	var lowercaser cases.Caser
-	if languageInvalid != nil {
+	if wordpackInvalid != nil {
 		lowercaser = cases.Lower(language.English)
 	} else {
-		lowercaser = languageData.Lowercaser()
+		lowercaser = wordpackData.Lowercaser()
 	}
 	customWords, customWordsInvalid := api.ParseCustomWords(lowercaser, request.Form.Get("custom_words"))
 
@@ -219,19 +222,23 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 			CustomWords:        request.Form.Get("custom_words"),
 			CustomWordsPerTurn: request.Form.Get("custom_words_per_turn"),
 			ClientsPerIPLimit:  request.Form.Get("clients_per_ip_limit"),
-			Language:           request.Form.Get("language"),
+			Wordpack:           requestedWordpack,
 			ScoreCalculation:   request.Form.Get("score_calculation"),
 			WordsPerTurn:       request.Form.Get("words_per_turn"),
 		},
-		Languages:         game.SupportedLanguages,
+		Wordpack:          requestedWordpack,
+		Wordpacks:         game.SupportedWordpacks,
 		ScoreCalculations: game.SupportedScoreCalculations,
 	}
 
 	if scoreCalculationInvalid != nil {
 		pageData.Errors = append(pageData.Errors, scoreCalculationInvalid.Error())
 	}
-	if languageInvalid != nil {
-		pageData.Errors = append(pageData.Errors, languageInvalid.Error())
+	if request.Form.Get("language") != "" {
+		pageData.Errors = append(pageData.Errors, "the 'language' field is no longer supported, use 'wordpack' instead")
+	}
+	if wordpackInvalid != nil {
+		pageData.Errors = append(pageData.Errors, wordpackInvalid.Error())
 	}
 	if drawingTimeInvalid != nil {
 		pageData.Errors = append(pageData.Errors, drawingTimeInvalid.Error())
@@ -290,7 +297,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		Public:             publicLobby,
 		WordsPerTurn:       wordsPerTurn,
 	}
-	player, lobby, err := game.CreateLobby(lobbyId, playerName, languageKey,
+	player, lobby, err := game.CreateLobby(lobbyId, playerName, wordpackKey,
 		lobbySettings, customWords, scoreCalculation)
 	if err != nil {
 		pageData.Errors = append(pageData.Errors, err.Error())

@@ -13,65 +13,70 @@ import (
 	"golang.org/x/text/language"
 )
 
-type LanguageData struct {
-	Lowercaser   func() cases.Caser
-	LanguageCode string
-	IsRtl        bool
+type WordpackData struct {
+	Lowercaser func() cases.Caser
+	FileName   string
+	IsRtl      bool
 }
 
 var (
-	ErrUnknownWordList = errors.New("wordlist unknown")
-	WordlistData       = map[string]LanguageData{
+	ErrUnknownWordpack = errors.New("wordpack unknown")
+	WordpackDataByName = map[string]WordpackData{
 		"english_gb": {
-			LanguageCode: "en_gb",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.BritishEnglish) },
+			FileName:   "en_gb",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.BritishEnglish) },
 		},
 		"english": {
-			LanguageCode: "en_us",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.AmericanEnglish) },
+			FileName:   "en_us",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.AmericanEnglish) },
 		},
 		"italian": {
-			LanguageCode: "it",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Italian) },
+			FileName:   "it",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Italian) },
 		},
 		"german": {
-			LanguageCode: "de",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.German) },
+			FileName:   "de",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.German) },
 		},
 		"french": {
-			LanguageCode: "fr",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.French) },
+			FileName:   "fr",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.French) },
 		},
 		"dutch": {
-			LanguageCode: "nl",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Dutch) },
+			FileName:   "nl",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Dutch) },
 		},
 		"ukrainian": {
-			LanguageCode: "ua",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Ukrainian) },
+			FileName:   "ua",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Ukrainian) },
 		},
 		"russian": {
-			LanguageCode: "ru",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Russian) },
+			FileName:   "ru",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Russian) },
 		},
 		"polish": {
-			LanguageCode: "pl",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Polish) },
+			FileName:   "pl",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Polish) },
 		},
 		"arabic": {
-			IsRtl:        true,
-			LanguageCode: "ar",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Arabic) },
+			IsRtl:      true,
+			FileName:   "ar",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Arabic) },
 		},
 		"hebrew": {
-			IsRtl:        true,
-			LanguageCode: "he",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Hebrew) },
+			IsRtl:      true,
+			FileName:   "he",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Hebrew) },
 		},
 		"persian": {
-			IsRtl:        true,
-			LanguageCode: "fa",
-			Lowercaser:   func() cases.Caser { return cases.Lower(language.Persian) },
+			IsRtl:      true,
+			FileName:   "fa",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Persian) },
+		},
+		"Persian_1": {
+			IsRtl:      true,
+			FileName:   "Persian_1",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.Persian) },
 		},
 	}
 
@@ -79,23 +84,23 @@ var (
 	wordFS embed.FS
 )
 
-func getLanguageIdentifier(language string) string {
-	return WordlistData[language].LanguageCode
+func getWordpackFileName(wordpack string) string {
+	return WordpackDataByName[wordpack].FileName
 }
 
 // readWordListInternal exists for testing purposes, it allows passing a custom
 // wordListSupplier, in order to avoid having to write tests aggainst the
-// default language lists.
+// default wordpack lists.
 func readWordListInternal(
-	lowercaser cases.Caser, chosenLanguage string,
+	lowercaser cases.Caser, chosenWordpack string,
 	wordlistSupplier func(string) (string, error),
 ) ([]string, error) {
-	languageIdentifier := getLanguageIdentifier(chosenLanguage)
-	if languageIdentifier == "" {
-		return nil, ErrUnknownWordList
+	wordpackFileName := getWordpackFileName(chosenWordpack)
+	if wordpackFileName == "" {
+		return nil, ErrUnknownWordpack
 	}
 
-	wordListFile, err := wordlistSupplier(languageIdentifier)
+	wordListFile, err := wordlistSupplier(wordpackFileName)
 	if err != nil {
 		return nil, fmt.Errorf("error invoking wordlistSupplier: %w", err)
 	}
@@ -106,16 +111,16 @@ func readWordListInternal(
 	return words, nil
 }
 
-// readDefaultWordList reads the wordlist for the given language from the filesystem.
+// readDefaultWordList reads the wordlist for the given wordpack from the filesystem.
 // If found, the list is cached and will be read from the cache upon next
 // request. The returned slice is a safe copy and can be mutated. If the
 // specified has no corresponding wordlist, an error is returned. This has been
 // a panic before, however, this could enable a user to forcefully crash the
 // whole application.
-func readDefaultWordList(lowercaser cases.Caser, chosenLanguage string) ([]string, error) {
-	log.Printf("Loading wordlist '%s'\n", chosenLanguage)
-	defer log.Printf("Wordlist loaded '%s'\n", chosenLanguage)
-	return readWordListInternal(lowercaser, chosenLanguage, func(key string) (string, error) {
+func readDefaultWordList(lowercaser cases.Caser, chosenWordpack string) ([]string, error) {
+	log.Printf("Loading wordpack '%s'\n", chosenWordpack)
+	defer log.Printf("Wordpack loaded '%s'\n", chosenWordpack)
+	return readWordListInternal(lowercaser, chosenWordpack, func(key string) (string, error) {
 		wordBytes, err := wordFS.ReadFile("words/" + key)
 		if err != nil {
 			return "", fmt.Errorf("error reading wordfile: %w", err)

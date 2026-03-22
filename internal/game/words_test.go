@@ -15,13 +15,13 @@ import (
 func Test_wordListsContainNoCarriageReturns(t *testing.T) {
 	t.Parallel()
 
-	for _, entry := range WordlistData {
-		fileName := entry.LanguageCode
+	for _, entry := range WordpackDataByName {
+		fileName := entry.FileName
 		fileBytes, err := wordFS.ReadFile("words/" + fileName)
 		if err != nil {
-			t.Errorf("language file '%s' could not be read: %s", fileName, err)
+			t.Errorf("wordpack file '%s' could not be read: %s", fileName, err)
 		} else if bytes.ContainsRune(fileBytes, '\r') {
-			t.Errorf("language file '%s' contains a carriage return", fileName)
+			t.Errorf("wordpack file '%s' contains a carriage return", fileName)
 		}
 	}
 }
@@ -33,38 +33,38 @@ func Test_readWordList(t *testing.T) {
 		t.Parallel()
 
 		words, err := readDefaultWordList(cases.Lower(language.English), "nonexistent")
-		assert.ErrorIs(t, err, ErrUnknownWordList)
+		assert.ErrorIs(t, err, ErrUnknownWordpack)
 		assert.Empty(t, words)
 	})
 
-	for language := range WordlistData {
-		t.Run(language, func(t *testing.T) {
+	for wordpack := range WordpackDataByName {
+		t.Run(wordpack, func(t *testing.T) {
 			t.Parallel()
 
-			testWordList(t, language)
-			testWordList(t, language)
+			testWordList(t, wordpack)
+			testWordList(t, wordpack)
 		})
 	}
 }
 
-func testWordList(t *testing.T, chosenLanguage string) {
+func testWordList(t *testing.T, chosenWordpack string) {
 	t.Helper()
 
-	lowercaser := WordlistData[chosenLanguage].Lowercaser()
-	words, err := readDefaultWordList(lowercaser, chosenLanguage)
+	lowercaser := WordpackDataByName[chosenWordpack].Lowercaser()
+	words, err := readDefaultWordList(lowercaser, chosenWordpack)
 	if err != nil {
-		t.Errorf("Error reading language %s: %s", chosenLanguage, err)
+		t.Errorf("Error reading wordpack %s: %s", chosenWordpack, err)
 	}
 
 	if len(words) == 0 {
-		t.Errorf("Wordlist for language %s was empty.", chosenLanguage)
+		t.Errorf("Wordlist for wordpack %s was empty.", chosenWordpack)
 	}
 
 	for _, word := range words {
 		if word == "" {
 			// We can't print the faulty line, since we are shuffling
 			// the words in order to avoid predictability.
-			t.Errorf("Wordlist for language %s contained empty word", chosenLanguage)
+			t.Errorf("Wordlist for wordpack %s contained empty word", chosenWordpack)
 		}
 
 		if strings.TrimSpace(word) != word {

@@ -56,7 +56,7 @@ func initArabicTranslation() *Translation {
 	translation.put("chill-alt", "مع أن السرعة تكافأ, إلا أنه لا بأس إن كنت أبطأ قليلا.\nالنقاط الأساسية مرتفعة نسبيا, ركز على الإستمتاع!")
 	translation.put("competitive-alt", "كلما كنت أسرع, حصلت على نقاط أكثر.\nالنقاط الأساسية أقل بكثير, و الإنخفاض أسرع.")
 	translation.put("score-calculation", "النقاط")
-	translation.put("word-language", "اللغة")
+	translation.put("word-pack", "حزمة كلمات")
 	translation.put("drawing-time-setting", "وقت الرسم")
 	translation.put("rounds-setting", "الجولات")
 	translation.put("max-players-setting", "الحد الأقصى للاعبين")

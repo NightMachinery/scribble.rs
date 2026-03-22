@@ -23,17 +23,27 @@ func ParsePlayerName(value string) (string, error) {
 	return trimmed, nil
 }
 
-// ParseLanguage checks whether the given value is part of the
-// game.SupportedLanguages array. The input is trimmed and lowercased.
-func ParseLanguage(value string) (*game.LanguageData, string, error) {
-	toLower := strings.ToLower(strings.TrimSpace(value))
-	for languageKey, data := range game.WordlistData {
-		if toLower == languageKey {
-			return &data, languageKey, nil
+// ParseWordpack checks whether the given value is part of the
+// game.SupportedWordpacks map. The input is trimmed. Exact matches are
+// preferred, but case-insensitive matches are also accepted and canonicalized.
+func ParseWordpack(value string) (game.WordpackData, string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return game.WordpackData{}, "", errors.New("the given wordpack doesn't match any supported wordpack")
+	}
+
+	data, ok := game.WordpackDataByName[trimmed]
+	if ok {
+		return data, trimmed, nil
+	}
+
+	for wordpackKey, data := range game.WordpackDataByName {
+		if strings.EqualFold(trimmed, wordpackKey) {
+			return data, wordpackKey, nil
 		}
 	}
 
-	return nil, "", errors.New("the given language doesn't match any supported language")
+	return game.WordpackData{}, "", errors.New("the given wordpack doesn't match any supported wordpack")
 }
 
 func ParseScoreCalculation(value string) (game.ScoreCalculation, error) {

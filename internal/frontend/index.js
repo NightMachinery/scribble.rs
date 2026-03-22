@@ -70,8 +70,8 @@ const set_lobby_list_loading = (loading) => {
     }
 };
 
-const language_to_flag = (language) => {
-    switch (language) {
+const wordpack_to_flag = (wordpack) => {
+    switch (wordpack) {
         case "english":
             return "\u{1f1fa}\u{1f1f8}";
         case "english_gb":
@@ -92,6 +92,9 @@ const language_to_flag = (language) => {
             return "\u{1f1f5}\u{1f1f1}";
         case "hebrew":
             return "\u{1f1ee}\u{1f1f1}";
+        case "persian":
+        case "Persian_1":
+            return "\u{1f1ee}\u{1f1f7}";
     }
 };
 
@@ -104,7 +107,7 @@ const set_lobbies = (lobbies, visible) => {
         language_flag.className = "language-flag";
         language_flag.setAttribute("title", lobby.wordpack);
         language_flag.setAttribute("english", lobby.wordpack);
-        language_flag.innerText = language_to_flag(lobby.wordpack);
+        language_flag.innerText = wordpack_to_flag(lobby.wordpack);
 
         const lobby_list_rows = document.createElement("div");
         lobby_list_rows.className = "lobby-list-rows";

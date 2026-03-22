@@ -51,13 +51,13 @@
                         </div>
                         {{end}}
                         <form id="lobby-create" action="{{.RootPath}}/lobby" method="POST">
-                            <label class="lobby-create-label" for="language">
-                                {{.Translation.Get "word-language"}}
+                            <label class="lobby-create-label" for="wordpack">
+                                {{.Translation.Get "word-pack"}}
                             </label>
-                            <select class="input-item" name="language" id="language" placeholder="Choose your language">
-                                {{$language := .Language}}
-                                {{range $k, $v := .Languages}}
-                                <option value="{{$k}}" label="{{$v}}" {{if eq $k $language}}selected="selected" {{end}}>
+                            <select class="input-item" name="wordpack" id="wordpack" placeholder="Choose your word pack">
+                                {{$wordpack := .Wordpack}}
+                                {{range $k, $v := .Wordpacks}}
+                                <option value="{{$k}}" label="{{$v}}" {{if eq $k $wordpack}}selected="selected" {{end}}>
                                 </option>
                                 {{end}}
                             </select>
