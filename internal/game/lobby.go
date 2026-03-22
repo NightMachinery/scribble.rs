@@ -39,6 +39,7 @@ var SupportedWordpacks = map[string]string{
 	"hebrew":     "Hebrew",
 	"persian":    "Persian",
 	"Persian_1":  "Persian_1",
+	"HP_2_med":   "HP_2_med",
 }
 
 const (

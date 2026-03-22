@@ -78,6 +78,10 @@ var (
 			FileName:   "Persian_1",
 			Lowercaser: func() cases.Caser { return cases.Lower(language.Persian) },
 		},
+		"HP_2_med": {
+			FileName:   "HP_2_med",
+			Lowercaser: func() cases.Caser { return cases.Lower(language.AmericanEnglish) },
+		},
 	}
 
 	//go:embed words/*
