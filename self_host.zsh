@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-DEFAULT_PUBLIC_URL='http://m2.pinky.lilf.ir'
+DEFAULT_PUBLIC_URL='http://scribble.pinky.lilf.ir'
 APP_HOST='127.0.0.1'
 APP_PORT='38180'
 SESSION_NAME='scribble-rs-self-host'
