@@ -123,6 +123,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	clientsPerIPLimit, clientsPerIPLimitInvalid := ParseClientsPerIPLimit(handler.cfg, request.Form.Get("clients_per_ip_limit"))
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", request.Form.Get("public"))
 	wordsPerTurn, wordsPerTurnInvalid := ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
+	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
 
 	if wordsPerTurn < customWordsPerTurn {
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
@@ -169,6 +170,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	if wordsPerTurnInvalid != nil {
 		requestErrors = append(requestErrors, wordsPerTurnInvalid.Error())
 	}
+	if lobbyPasswordInvalid != nil {
+		requestErrors = append(requestErrors, lobbyPasswordInvalid.Error())
+	}
 
 	if len(requestErrors) != 0 {
 		http.Error(writer, strings.Join(requestErrors, ";"), http.StatusBadRequest)
@@ -190,6 +194,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	if err != nil {
 		http.Error(writer, err.Error(), http.StatusBadRequest)
 		return
+	}
+	if lobbyPassword != "" {
+		lobby.SetJoinPassword(lobbyPassword)
 	}
 
 	// Due to the fact the IDs can be chosen manually, there's a big clash
@@ -226,6 +233,16 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 		http.Error(writer, ErrLobbyNotExistent.Error(), http.StatusNotFound)
 		return
 	}
+	if err := request.ParseForm(); err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
+	if lobbyPasswordInvalid != nil {
+		http.Error(writer, lobbyPasswordInvalid.Error(), http.StatusBadRequest)
+		return
+	}
 
 	var lobbyData *LobbyData
 
@@ -242,6 +259,10 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 
 			if !lobby.CanIPConnect(requestAddress) {
 				http.Error(writer, "maximum amount of players per IP reached", http.StatusUnauthorized)
+				return
+			}
+			if !lobby.ValidateJoinPassword(lobbyPassword) {
+				http.Error(writer, "invalid lobby password", http.StatusForbidden)
 				return
 			}
 
@@ -386,6 +407,8 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	clientsPerIPLimit, clientsPerIPLimitInvalid := ParseClientsPerIPLimit(handler.cfg, request.Form.Get("clients_per_ip_limit"))
 	publicLobby, publicLobbyInvalid := ParseBoolean("public", request.Form.Get("public"))
 	wordsPerTurn, wordsPerTurnInvalid := ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
+	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
+	clearPassword, clearPasswordInvalid := ParseBoolean("clear_password", request.Form.Get("clear_password"))
 
 	if wordsPerTurn < customWordsPerTurn {
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
@@ -423,6 +446,15 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	if wordsPerTurnInvalid != nil {
 		requestErrors = append(requestErrors, wordsPerTurnInvalid.Error())
 	}
+	if lobbyPasswordInvalid != nil {
+		requestErrors = append(requestErrors, lobbyPasswordInvalid.Error())
+	}
+	if clearPasswordInvalid != nil {
+		requestErrors = append(requestErrors, clearPasswordInvalid.Error())
+	}
+	if lobbyPassword != "" && clearPassword {
+		requestErrors = append(requestErrors, "can't set and clear the lobby password in the same request")
+	}
 
 	if len(requestErrors) != 0 {
 		http.Error(writer, strings.Join(requestErrors, ";"), http.StatusBadRequest)
@@ -447,6 +479,11 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 			lobby.DrawingTimeNew = drawingTime
 		} else {
 			lobby.DrawingTime = drawingTime
+		}
+		if clearPassword {
+			lobby.ClearJoinPassword()
+		} else if lobbyPassword != "" {
+			lobby.SetJoinPassword(lobbyPassword)
 		}
 
 		lobbySettingsCopy := lobby.EditableLobbySettings

@@ -563,3 +563,66 @@ func Test_NoPrematureGameOver(t *testing.T) {
 	require.Equal(t, Standby, player.State)
 	require.Equal(t, Unstarted, lobby.State)
 }
+
+func Test_LobbyPasswordValidation(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{}
+	require.True(t, lobby.ValidateJoinPassword(""))
+
+	lobby.SetJoinPassword("secret")
+	require.True(t, lobby.HasPassword)
+	require.True(t, lobby.ValidateJoinPassword("secret"))
+	require.False(t, lobby.ValidateJoinPassword("wrong"))
+
+	lobby.Public = true
+	require.True(t, lobby.ValidateJoinPassword(""))
+
+	lobby.Public = false
+	lobby.ClearJoinPassword()
+	require.False(t, lobby.HasPassword)
+	require.True(t, lobby.ValidateJoinPassword(""))
+}
+
+func Test_ownerForceSpectateDrawer(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:  10,
+			Rounds:       10,
+			WordsPerTurn: 3,
+		},
+		ScoreCalculation: ChillScoring,
+		words:            []string{"a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = true
+
+	replacement := lobby.JoinPlayer("replacement")
+	replacement.Connected = true
+
+	require.NoError(t, lobby.HandleEvent(EventTypeStart, nil, owner))
+
+	lobby.Synchronized(func() {
+		advanceLobby(lobby)
+	})
+	require.Equal(t, target, lobby.Drawer())
+
+	payload, err := json.Marshal(Event{
+		Type: EventTypeOwnerForceSpectate,
+		Data: target.ID.String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, lobby.HandleEvent(EventTypeOwnerForceSpectate, payload, owner))
+
+	require.Equal(t, Spectating, target.State)
+	require.Equal(t, replacement, lobby.Drawer())
+}

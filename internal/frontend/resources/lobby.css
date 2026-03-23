@@ -560,6 +560,32 @@ kbd {
     flex: 1;
 }
 
+.kick-player-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.kick-player-row + .kick-player-row {
+    margin-top: 0.5rem;
+}
+
+.kick-player-name {
+    word-break: break-word;
+}
+
+.kick-player-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.kick-player-action-button {
+    white-space: nowrap;
+}
+
 .kick-player-button {
     width: 100%;
 }

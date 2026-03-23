@@ -83,12 +83,19 @@
                                         class="header-button-image" />
                                     {{.Translation.Get "show-help"}}
                                 </button>
+                                <button id="copy-lobby-link-button" class="dialog-button menu-item header-button"
+                                    alt="{{.Translation.Get "copy-lobby-link"}}"
+                                    title="{{.Translation.Get "copy-lobby-link"}}">
+                                    <img src='{{.RootPath}}/resources/{{.WithCacheBust "user.svg"}}'
+                                        class="header-button-image" />
+                                    {{.Translation.Get "copy-lobby-link"}}
+                                </button>
                                 <button id="kick-button" class="dialog-button menu-item header-button"
                                     alt="{{.Translation.Get "votekick-a-player"}}"
                                     title="{{.Translation.Get "votekick-a-player"}}">
                                     <img src='{{.RootPath}}/resources/{{.WithCacheBust "kick.png"}}'
                                         class="header-button-image" />
-                                    {{.Translation.Get "votekick-a-player"}}
+                                    <span id="kick-button-label">{{.Translation.Get "votekick-a-player"}}</span>
                                 </button>
                                 <button id="lobby-settings-button" style="display: none;"
                                     class="dialog-button menu-item header-button"
@@ -211,6 +218,12 @@
                                     <input id="lobby-settings-clients-per-ip-limit" type="number"
                                         name="clients_per_ip_limit" min="{{.MinClientsPerIPLimit}}"
                                         max="{{.MaxClientsPerIPLimit}}" value="{{.ClientsPerIPLimit}}" />
+                                    <b>{{.Translation.Get "lobby-password-setting"}}</b>
+                                    <input id="lobby-settings-password" type="password" name="password"
+                                        placeholder="{{.Translation.Get "lobby-password-placeholder"}}" />
+                                    <span id="lobby-settings-password-status">{{if eq .HasPassword true}}{{.Translation.Get "lobby-password-set"}}{{else}}{{.Translation.Get "lobby-password-not-set"}}{{end}}</span>
+                                    <label for="lobby-settings-clear-password">{{.Translation.Get "remove-lobby-password"}}</label>
+                                    <input id="lobby-settings-clear-password" type="checkbox" name="clear_password" />
                                 </div>
                             </div>
                             <div class="button-bar">
@@ -241,7 +254,7 @@
                         </div>
 
                         <div id="kick-dialog" class="center-dialog">
-                            <span class="dialog-title">{{.Translation.Get "votekick-a-player"}}</span>
+                            <span id="kick-dialog-title" class="dialog-title">{{.Translation.Get "votekick-a-player"}}</span>
                             <div class="center-dialog-content">
                                 <div id="kick-dialog-players"></div>
                             </div>

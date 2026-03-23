@@ -183,6 +183,30 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 		}
 
 		handleKickVoteEvent(lobby, player, toKickID)
+	} else if eventType == EventTypeOwnerKick {
+		var kickEvent StringDataEvent
+		if err := json.Unmarshal(payload, &kickEvent); err != nil {
+			return fmt.Errorf("invalid data received: '%s'", string(payload))
+		}
+
+		toKickID, err := uuid.FromString(kickEvent.Data)
+		if err != nil {
+			return fmt.Errorf("invalid data in owner-kick event: %v", payload)
+		}
+
+		handleOwnerKickEvent(lobby, player, toKickID)
+	} else if eventType == EventTypeOwnerForceSpectate {
+		var spectateEvent StringDataEvent
+		if err := json.Unmarshal(payload, &spectateEvent); err != nil {
+			return fmt.Errorf("invalid data received: '%s'", string(payload))
+		}
+
+		targetID, err := uuid.FromString(spectateEvent.Data)
+		if err != nil {
+			return fmt.Errorf("invalid data in owner-force-spectate event: %v", payload)
+		}
+
+		handleOwnerForceSpectateEvent(lobby, player, targetID)
 	} else if eventType == EventTypeToggleReadiness {
 		lobby.handleToggleReadinessEvent(player)
 	} else if eventType == EventTypeStart {
@@ -487,6 +511,50 @@ func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID uuid.UUID) {
 	}
 }
 
+func handleOwnerKickEvent(lobby *Lobby, owner *Player, toKickID uuid.UUID) {
+	if owner.ID != lobby.OwnerID || toKickID == owner.ID {
+		return
+	}
+
+	playerToKickIndex := getPlayerIndexByID(lobby, toKickID)
+	if playerToKickIndex == -1 {
+		return
+	}
+
+	playerToKick := lobby.players[playerToKickIndex]
+	lobby.Broadcast(&Event{
+		Type: EventTypeOwnerKick,
+		Data: &PlayerEvent{
+			PlayerID:   playerToKick.ID,
+			PlayerName: playerToKick.Name,
+		},
+	})
+	kickPlayer(lobby, playerToKick, playerToKickIndex)
+}
+
+func handleOwnerForceSpectateEvent(lobby *Lobby, owner *Player, targetID uuid.UUID) {
+	if owner.ID != lobby.OwnerID || targetID == owner.ID {
+		return
+	}
+
+	targetIndex := getPlayerIndexByID(lobby, targetID)
+	if targetIndex == -1 {
+		return
+	}
+
+	forcePlayerToSpectate(lobby, lobby.players[targetIndex], targetIndex)
+}
+
+func getPlayerIndexByID(lobby *Lobby, playerID uuid.UUID) int {
+	for index, otherPlayer := range lobby.players {
+		if otherPlayer.ID == playerID {
+			return index
+		}
+	}
+
+	return -1
+}
+
 // kickPlayer kicks the given player from the lobby, updating the lobby
 // state and sending all necessary events.
 func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
@@ -495,6 +563,8 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 		// 4k-5k is codes not in the spec, they are free to use.
 		playerToKickSocket.WriteClose(4000, nil)
 	}
+	playerToKick.Connected = false
+	playerToKick.ws = nil
 
 	// Since the player is already kicked, we first clean up the kicking information related to that player
 	for _, otherPlayer := range lobby.players {
@@ -505,7 +575,7 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 	if lobby.OwnerID == playerToKick.ID {
 		for _, otherPlayer := range lobby.players {
 			potentialOwner := otherPlayer
-			if potentialOwner.Connected {
+			if potentialOwner.ID != playerToKick.ID && potentialOwner.Connected {
 				lobby.OwnerID = potentialOwner.ID
 				lobby.Broadcast(&Event{
 					Type: EventTypeOwnerChange,
@@ -520,7 +590,7 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 	}
 
 	if playerToKick.State == Drawing {
-		newDrawer, roundOver := determineNextDrawer(lobby)
+		newDrawer, roundOver := determineNextDrawerAfterIndex(lobby, playerToKickIndex, playerToKick.ID)
 		lobby.players = append(lobby.players[:playerToKickIndex], lobby.players[playerToKickIndex+1:]...)
 		lobby.Broadcast(&EventTypeOnly{Type: EventTypeDrawerKicked})
 
@@ -544,6 +614,48 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 			advanceLobby(lobby)
 		}
 	}
+}
+
+func forcePlayerToSpectate(lobby *Lobby, playerToSpectate *Player, playerIndex int) {
+	if playerToSpectate.State == Spectating {
+		return
+	}
+
+	playerToSpectate.SpectateToggleRequested = false
+	lobby.Broadcast(&Event{
+		Type: EventTypeOwnerForceSpectate,
+		Data: &PlayerEvent{
+			PlayerID:   playerToSpectate.ID,
+			PlayerName: playerToSpectate.Name,
+		},
+	})
+
+	if playerToSpectate.State == Drawing {
+		lobby.roundEndReason = drawerForcedSpectate
+		newDrawer, roundOver := determineNextDrawerAfterIndex(lobby, playerIndex, playerToSpectate.ID)
+		playerToSpectate.State = Spectating
+
+		// Since the drawer has been removed from the round, the round shouldn't
+		// award points to anyone.
+		for _, otherPlayer := range lobby.players {
+			otherPlayer.Score -= otherPlayer.LastScore
+			otherPlayer.LastScore = 0
+		}
+
+		advanceLobbyPredefineDrawer(lobby, roundOver, newDrawer)
+		return
+	}
+
+	playerToSpectate.State = Spectating
+	playerToSpectate.LastScore = 0
+
+	if lobby.State == Ongoing && !lobby.isAnyoneStillGuessing() {
+		advanceLobby(lobby)
+		return
+	}
+
+	recalculateRanks(lobby)
+	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
 }
 
 func (lobby *Lobby) Drawer() *Player {
@@ -737,25 +849,29 @@ func (player *Player) desiresToDraw() bool {
 func determineNextDrawer(lobby *Lobby) (*Player, bool) {
 	for index, player := range lobby.players {
 		if player.State == Drawing {
-			// If we have someone that's drawing, take the next one
-			for i := index + 1; i < len(lobby.players); i++ {
-				nextPlayer := lobby.players[i]
-				if !nextPlayer.desiresToDraw() || !nextPlayer.Connected {
-					continue
-				}
+			return determineNextDrawerAfterIndex(lobby, index, uuid.Nil)
+		}
+	}
 
-				return nextPlayer, false
+	return determineNextDrawerAfterIndex(lobby, -1, uuid.Nil)
+}
+
+func determineNextDrawerAfterIndex(lobby *Lobby, currentIndex int, excludedID uuid.UUID) (*Player, bool) {
+	if currentIndex >= 0 {
+		// If we have someone that's drawing, take the next eligible one after them first.
+		for i := currentIndex + 1; i < len(lobby.players); i++ {
+			nextPlayer := lobby.players[i]
+			if nextPlayer.ID == excludedID || !nextPlayer.desiresToDraw() || !nextPlayer.Connected {
+				continue
 			}
 
-			// No player below the current drawer has been found, therefore we
-			// fallback to our default logic at the bottom.
-			break
+			return nextPlayer, false
 		}
 	}
 
 	// We prefer the first connected player and non-spectating.
 	for _, player := range lobby.players {
-		if !player.desiresToDraw() || !player.Connected {
+		if player.ID == excludedID || !player.desiresToDraw() || !player.Connected {
 			continue
 		}
 		return player, true

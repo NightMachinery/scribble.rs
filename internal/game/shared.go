@@ -13,12 +13,14 @@ import (
 
 // Eevnts that are just incomming from the client.
 const (
-	EventTypeStart           = "start"
-	EventTypeToggleReadiness = "toggle-readiness"
-	EventTypeToggleSpectate  = "toggle-spectate"
-	EventTypeRequestDrawing  = "request-drawing"
-	EventTypeChooseWord      = "choose-word"
-	EventTypeUndo            = "undo"
+	EventTypeStart              = "start"
+	EventTypeToggleReadiness    = "toggle-readiness"
+	EventTypeToggleSpectate     = "toggle-spectate"
+	EventTypeOwnerKick          = "owner-kick"
+	EventTypeOwnerForceSpectate = "owner-force-spectate"
+	EventTypeRequestDrawing     = "request-drawing"
+	EventTypeChooseWord         = "choose-word"
+	EventTypeUndo               = "undo"
 )
 
 // Events that are outgoing only.
@@ -136,6 +138,11 @@ type KickVote struct {
 }
 
 type OwnerChangeEvent struct {
+	PlayerName string    `json:"playerName"`
+	PlayerID   uuid.UUID `json:"playerId"`
+}
+
+type PlayerEvent struct {
 	PlayerName string    `json:"playerName"`
 	PlayerID   uuid.UUID `json:"playerId"`
 }
@@ -292,6 +299,9 @@ type EditableLobbySettings struct {
 	// Public defines whether the lobby is being broadcast to clients asking
 	// for available lobbies.
 	Public bool `json:"public"`
+	// HasPassword indicates whether the lobby currently has a password set.
+	// The password itself is never exposed to clients.
+	HasPassword bool `json:"hasPassword"`
 	// MaxPlayers defines the maximum amount of players in a single lobby.
 	MaxPlayers         int `json:"maxPlayers"`
 	CustomWordsPerTurn int `json:"customWordsPerTurn"`

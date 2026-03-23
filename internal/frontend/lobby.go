@@ -20,6 +20,16 @@ type lobbyPageData struct {
 	Locale      string
 }
 
+type lobbyPasswordPageData struct {
+	*BasePageConfig
+
+	LobbyID      string
+	ErrorMessage string
+
+	Translation *translations.Translation
+	Locale      string
+}
+
 type lobbyJsData struct {
 	*BasePageConfig
 	*api.GameConstants
@@ -48,7 +58,7 @@ func (handler *SSRHandler) lobbyJs(writer http.ResponseWriter, request *http.Req
 
 // ssrEnterLobby opens a lobby, either opening it directly or asking for a lobby.
 func (handler *SSRHandler) ssrEnterLobby(writer http.ResponseWriter, request *http.Request) {
-	translation, _ := determineTranslation(request)
+	translation, locale := determineTranslation(request)
 	lobby := state.GetLobby(request.PathValue("lobby_id"))
 	if lobby == nil {
 		handler.userFacingError(writer, translation.Get("lobby-doesnt-exist"), translation)
@@ -62,10 +72,72 @@ func (handler *SSRHandler) ssrEnterLobby(writer http.ResponseWriter, request *ht
 		return
 	}
 
+	if player := api.GetPlayer(lobby, request); player == nil && lobby.RequiresPassword() {
+		if err := pageTemplates.ExecuteTemplate(writer, "lobby-password-page", &lobbyPasswordPageData{
+			BasePageConfig: handler.basePageConfig,
+			LobbyID:        lobby.LobbyID,
+			Translation:    translation,
+			Locale:         locale,
+		}); err != nil {
+			log.Printf("Error templating lobby password page: %s\n", err)
+		}
+		return
+	}
+
 	handler.ssrEnterLobbyNoChecks(lobby, writer, request,
 		func() *game.Player {
 			return api.GetPlayer(lobby, request)
 		})
+}
+
+func (handler *SSRHandler) ssrJoinLobby(writer http.ResponseWriter, request *http.Request) {
+	translation, locale := determineTranslation(request)
+	lobby := state.GetLobby(request.PathValue("lobby_id"))
+	if lobby == nil {
+		handler.userFacingError(writer, translation.Get("lobby-doesnt-exist"), translation)
+		return
+	}
+	if err := request.ParseForm(); err != nil {
+		http.Error(writer, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	lobbyPassword, passwordErr := api.ParseLobbyPassword(request.Form.Get("password"))
+	if passwordErr != nil {
+		if err := pageTemplates.ExecuteTemplate(writer, "lobby-password-page", &lobbyPasswordPageData{
+			BasePageConfig: handler.basePageConfig,
+			LobbyID:        lobby.LobbyID,
+			ErrorMessage:   passwordErr.Error(),
+			Translation:    translation,
+			Locale:         locale,
+		}); err != nil {
+			log.Printf("Error templating lobby password page: %s\n", err)
+		}
+		return
+	}
+
+	if player := api.GetPlayer(lobby, request); player == nil && !lobby.ValidateJoinPassword(lobbyPassword) {
+		if err := pageTemplates.ExecuteTemplate(writer, "lobby-password-page", &lobbyPasswordPageData{
+			BasePageConfig: handler.basePageConfig,
+			LobbyID:        lobby.LobbyID,
+			ErrorMessage:   translation.Get("lobby-password-invalid"),
+			Translation:    translation,
+			Locale:         locale,
+		}); err != nil {
+			log.Printf("Error templating lobby password page: %s\n", err)
+		}
+		return
+	}
+
+	pageData := handler.joinLobbyNoChecks(lobby, writer, request,
+		func() *game.Player {
+			return api.GetPlayer(lobby, request)
+		})
+	if pageData == nil {
+		return
+	}
+
+	http.Redirect(writer, request, handler.basePageConfig.RootPath+"/lobby/"+lobby.LobbyID, http.StatusFound)
 }
 
 func (handler *SSRHandler) ssrEnterLobbyNoChecks(
@@ -74,6 +146,24 @@ func (handler *SSRHandler) ssrEnterLobbyNoChecks(
 	request *http.Request,
 	getPlayer func() *game.Player,
 ) {
+	pageData := handler.joinLobbyNoChecks(lobby, writer, request, getPlayer)
+
+	// If the pagedata isn't initialized, it means the synchronized block has exited.
+	// In this case we don't want to template the lobby, since an error has occurred
+	// and probably already has been handled.
+	if pageData != nil {
+		if err := pageTemplates.ExecuteTemplate(writer, "lobby-page", pageData); err != nil {
+			log.Printf("Error templating lobby: %s\n", err)
+		}
+	}
+}
+
+func (handler *SSRHandler) joinLobbyNoChecks(
+	lobby *game.Lobby,
+	writer http.ResponseWriter,
+	request *http.Request,
+	getPlayer func() *game.Player,
+) *lobbyPageData {
 	translation, locale := determineTranslation(request)
 	requestAddress := api.GetIPAddressFromRequest(request)
 	api.SetDiscordCookies(writer, request)
@@ -114,14 +204,7 @@ func (handler *SSRHandler) ssrEnterLobbyNoChecks(
 		}
 	})
 
-	// If the pagedata isn't initialized, it means the synchronized block has exited.
-	// In this case we don't want to template the lobby, since an error has occurred
-	// and probably already has been handled.
-	if pageData != nil {
-		if err := pageTemplates.ExecuteTemplate(writer, "lobby-page", pageData); err != nil {
-			log.Printf("Error templating lobby: %s\n", err)
-		}
-	}
+	return pageData
 }
 
 func determineTranslation(r *http.Request) (*translations.Translation, string) {

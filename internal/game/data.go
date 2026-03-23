@@ -1,6 +1,8 @@
 package game
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ type roundEndReason string
 
 const (
 	drawerDisconnected   roundEndReason = "drawer_disconnected"
+	drawerForcedSpectate roundEndReason = "drawer_forced_spectating"
 	guessersDisconnected roundEndReason = "guessers_disconnected"
 )
 
@@ -35,8 +38,9 @@ type Lobby struct {
 	// screw with the score calculation of the current turn.
 	DrawingTimeNew int
 
-	CustomWords []string
-	words       []string
+	CustomWords      []string
+	words            []string
+	joinPasswordHash [sha256.Size]byte
 
 	// players references all participants of the Lobby.
 	players []*Player
@@ -174,6 +178,34 @@ func (lobby *Lobby) GetOwner() *Player {
 func (lobby *Lobby) ClearDrawing() {
 	lobby.currentDrawing = make([]any, 0)
 	lobby.connectedDrawEventsIndexStack = nil
+}
+
+func (lobby *Lobby) SetJoinPassword(password string) {
+	if password == "" {
+		lobby.ClearJoinPassword()
+		return
+	}
+
+	lobby.joinPasswordHash = sha256.Sum256([]byte(password))
+	lobby.HasPassword = true
+}
+
+func (lobby *Lobby) ClearJoinPassword() {
+	lobby.joinPasswordHash = [sha256.Size]byte{}
+	lobby.HasPassword = false
+}
+
+func (lobby *Lobby) RequiresPassword() bool {
+	return !lobby.Public && lobby.HasPassword
+}
+
+func (lobby *Lobby) ValidateJoinPassword(password string) bool {
+	if !lobby.RequiresPassword() {
+		return true
+	}
+
+	passwordHash := sha256.Sum256([]byte(password))
+	return subtle.ConstantTimeCompare(passwordHash[:], lobby.joinPasswordHash[:]) == 1
 }
 
 // AppendLine adds a line direction to the current drawing. This exists in order

@@ -108,6 +108,19 @@ func ParseCustomWords(lowercaser cases.Caser, value string) ([]string, error) {
 	return result, nil
 }
 
+const MaxLobbyPasswordLength = 256
+
+// ParseLobbyPassword validates the supplied lobby password. Empty values are
+// allowed and indicate that no password should be set or supplied. Passwords
+// are kept verbatim and are not trimmed.
+func ParseLobbyPassword(value string) (string, error) {
+	if len(value) > MaxLobbyPasswordLength {
+		return "", fmt.Errorf("the lobby password must be at most %d characters long", MaxLobbyPasswordLength)
+	}
+
+	return value, nil
+}
+
 // ParseClientsPerIPLimit checks whether the given value is an integer between
 // the lower and upper bound of maximum clients per IP. All other invalid
 // input, including empty strings, will return an error.

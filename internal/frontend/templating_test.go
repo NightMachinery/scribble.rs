@@ -59,3 +59,21 @@ func Test_templateIndexPage(t *testing.T) {
 		t.Errorf("Error templating: %s", err)
 	}
 }
+
+func Test_templateLobbyPasswordPage(t *testing.T) {
+	t.Parallel()
+
+	var buffer bytes.Buffer
+	err := pageTemplates.ExecuteTemplate(&buffer,
+		"lobby-password-page", &lobbyPasswordPageData{
+			BasePageConfig: &BasePageConfig{
+				checksums: make(map[string]string),
+			},
+			LobbyID:     "TEST",
+			Translation: translations.DefaultTranslation,
+			Locale:      "en-US",
+		})
+	if err != nil {
+		t.Errorf("Error templating: %s", err)
+	}
+}

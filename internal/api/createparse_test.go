@@ -2,6 +2,7 @@ package api
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/scribble-rs/scribble.rs/internal/config"
@@ -321,6 +322,36 @@ func Test_parseBoolean(t *testing.T) {
 			}
 			if got != testCase.want {
 				t.Errorf("parseBoolean() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
+func Test_parseLobbyPassword(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{"empty password", "", "", false},
+		{"verbatim spaces", "  secret  ", "  secret  ", false},
+		{"normal password", "hunter2", "hunter2", false},
+		{"too long", strings.Repeat("a", MaxLobbyPasswordLength+1), "", true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseLobbyPassword(testCase.value)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("ParseLobbyPassword() error = %v, wantErr %v", err, testCase.wantErr)
+			}
+			if got != testCase.want {
+				t.Fatalf("ParseLobbyPassword() = %q, want %q", got, testCase.want)
 			}
 		})
 	}

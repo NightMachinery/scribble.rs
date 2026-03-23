@@ -196,6 +196,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	clientsPerIPLimit, clientsPerIPLimitInvalid := api.ParseClientsPerIPLimit(handler.cfg, request.Form.Get("clients_per_ip_limit"))
 	publicLobby, publicLobbyInvalid := api.ParseBoolean("public", request.Form.Get("public"))
 	wordsPerTurn, wordsPerTurnInvalid := api.ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
+	lobbyPassword, lobbyPasswordInvalid := api.ParseLobbyPassword(request.Form.Get("password"))
 
 	if wordsPerTurn < customWordsPerTurn {
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
@@ -225,6 +226,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 			Wordpack:           requestedWordpack,
 			ScoreCalculation:   request.Form.Get("score_calculation"),
 			WordsPerTurn:       request.Form.Get("words_per_turn"),
+			Password:           request.Form.Get("password"),
 		},
 		Wordpack:          requestedWordpack,
 		Wordpacks:         game.SupportedWordpacks,
@@ -263,6 +265,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	}
 	if wordsPerTurnInvalid != nil {
 		pageData.Errors = append(pageData.Errors, wordsPerTurnInvalid.Error())
+	}
+	if lobbyPasswordInvalid != nil {
+		pageData.Errors = append(pageData.Errors, lobbyPasswordInvalid.Error())
 	}
 
 	translation, locale := determineTranslation(request)
@@ -306,6 +311,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		}
 
 		return
+	}
+	if lobbyPassword != "" {
+		lobby.SetJoinPassword(lobbyPassword)
 	}
 
 	lobby.WriteObject = api.WriteObject

@@ -30,9 +30,9 @@ function showReconnectDialogIfNotShown() {
 //Otherwise a refresh (on chromium based browsers) can lead to the server
 //thinking that there's already an open tab with this lobby.
 window.onbeforeunload = () => {
-    //Avoid unintentionally reestablishing connection.
-    socket.onclose = null;
     if (socket) {
+        //Avoid unintentionally reestablishing connection.
+        socket.onclose = null;
         socket.close();
     }
 };
@@ -57,8 +57,18 @@ const namechangeFieldStartDialog = document.getElementById(
 );
 const namechangeField = document.getElementById("namechange-field");
 
+const copyLobbyLinkButton = document.getElementById("copy-lobby-link-button");
+const kickButton = document.getElementById("kick-button");
+const kickButtonLabel = document.getElementById("kick-button-label");
 const lobbySettingsButton = document.getElementById("lobby-settings-button");
 const lobbySettingsDialog = document.getElementById("lobbysettings-dialog");
+const lobbySettingsPassword = document.getElementById("lobby-settings-password");
+const lobbySettingsClearPassword = document.getElementById(
+    "lobby-settings-clear-password",
+);
+const lobbySettingsPasswordStatus = document.getElementById(
+    "lobby-settings-password-status",
+);
 
 const startDialog = document.getElementById("start-dialog");
 const forceStartButton = document.getElementById("force-start-button");
@@ -71,6 +81,7 @@ const wordPreSelected = document.getElementById("word-preselected");
 const wordButtonContainer = document.getElementById("word-button-container");
 
 const kickDialog = document.getElementById("kick-dialog");
+const kickDialogTitle = document.getElementById("kick-dialog-title");
 const kickDialogPlayers = document.getElementById("kick-dialog-players");
 
 const soundToggleLabel = document.getElementById("sound-toggle-label");
@@ -213,21 +224,146 @@ document
     .getElementById("help-button")
     .addEventListener("click", showHelpDialog);
 
+function currentLobbyURL() {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+}
+
+function showCopyLobbyLinkFallback(link) {
+    closeDialog("copy-lobby-link-dialog");
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.readOnly = true;
+    input.value = link;
+    input.style.width = "100%";
+    input.addEventListener("focus", () => input.select());
+    input.addEventListener("click", () => input.select());
+
+    const content = document.createElement("div");
+    content.style.width = "100%";
+    content.appendChild(input);
+
+    const closeButton = createDialogButton('{{.Translation.Get "close"}}');
+    closeButton.addEventListener("click", () => {
+        closeDialog("copy-lobby-link-dialog");
+    });
+
+    showDialog(
+        "copy-lobby-link-dialog",
+        '{{.Translation.Get "copy-lobby-link"}}',
+        content,
+        createDialogButtonBar(closeButton),
+    );
+
+    input.focus();
+    input.select();
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+    }
+
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.setAttribute("readonly", "");
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    let copied = false;
+    try {
+        copied = document.execCommand("copy");
+    } finally {
+        document.body.removeChild(textArea);
+    }
+
+    return copied;
+}
+
+async function copyLobbyLink() {
+    hideMenu();
+
+    const lobbyURL = currentLobbyURL();
+    try {
+        const copied = await copyTextToClipboard(lobbyURL);
+        if (copied) {
+            showInfoDialog(
+                '{{.Translation.Get "copied-lobby-link-title"}}',
+                '{{.Translation.Get "copied-lobby-link-text"}}',
+                '{{.Translation.Get "confirm"}}',
+            );
+        } else {
+            showCopyLobbyLinkFallback(lobbyURL);
+        }
+    } catch (_error) {
+        showCopyLobbyLinkFallback(lobbyURL);
+    }
+}
+copyLobbyLinkButton.addEventListener("click", copyLobbyLink);
+
 function showKickDialog() {
     hideMenu();
 
     if (cachedPlayers && cachedPlayers) {
         kickDialogPlayers.innerHTML = "";
+        const isOwner = ownerID === ownID;
+        kickDialogTitle.innerText = isOwner
+            ? '{{.Translation.Get "manage-players"}}'
+            : '{{.Translation.Get "votekick-a-player"}}';
 
         cachedPlayers.forEach((player) => {
             //Don't wanna allow kicking ourselves.
             if (player.id !== ownID && player.connected) {
-                const playerKickEntry = document.createElement("button");
-                playerKickEntry.classList.add("kick-player-button");
-                playerKickEntry.classList.add("dialog-button");
-                playerKickEntry.onclick = () => onVotekickPlayer(player.id);
-                playerKickEntry.innerText = player.name;
-                kickDialogPlayers.appendChild(playerKickEntry);
+                if (isOwner) {
+                    const playerRow = document.createElement("div");
+                    playerRow.classList.add("kick-player-row");
+
+                    const playerName = document.createElement("span");
+                    playerName.classList.add("kick-player-name");
+                    playerName.innerText = player.name;
+
+                    const playerActions = document.createElement("div");
+                    playerActions.classList.add("kick-player-actions");
+
+                    const kickButton = document.createElement("button");
+                    kickButton.classList.add("dialog-button");
+                    kickButton.classList.add("kick-player-action-button");
+                    kickButton.onclick = () => onOwnerKickPlayer(player.id);
+                    kickButton.innerText =
+                        '{{.Translation.Get "kick-player"}}';
+
+                    playerActions.appendChild(kickButton);
+
+                    if (player.state !== "spectating") {
+                        const spectateButton = document.createElement("button");
+                        spectateButton.classList.add("dialog-button");
+                        spectateButton.classList.add(
+                            "kick-player-action-button",
+                        );
+                        spectateButton.onclick = () =>
+                            onOwnerForceSpectatePlayer(player.id);
+                        spectateButton.innerText =
+                            '{{.Translation.Get "force-player-spectator"}}';
+                        playerActions.appendChild(spectateButton);
+                    }
+
+                    playerRow.replaceChildren(playerName, playerActions);
+                    kickDialogPlayers.appendChild(playerRow);
+                } else {
+                    const playerKickEntry = document.createElement("button");
+                    playerKickEntry.classList.add("kick-player-button");
+                    playerKickEntry.classList.add("dialog-button");
+                    playerKickEntry.onclick = () => onVotekickPlayer(player.id);
+                    playerKickEntry.innerText = player.name;
+                    kickDialogPlayers.appendChild(playerKickEntry);
+                }
             }
         });
 
@@ -315,6 +451,31 @@ document
     .getElementById("lobby-settings-close-button")
     .addEventListener("click", hideLobbySettingsDialog);
 
+function updateLobbyPasswordStatus(hasPassword) {
+    lobbySettingsPasswordStatus.innerText = hasPassword
+        ? '{{.Translation.Get "lobby-password-set"}}'
+        : '{{.Translation.Get "lobby-password-not-set"}}';
+}
+
+function updateLobbySettingsForm(settings) {
+    document.getElementById("lobby-settings-drawing-time").value =
+        settings.drawingTime;
+    document.getElementById("lobby-settings-max-rounds").value =
+        settings.rounds;
+    document.getElementById("lobby-settings-public").checked = settings.public;
+    document.getElementById("lobby-settings-max-players").value =
+        settings.maxPlayers;
+    document.getElementById("lobby-settings-clients-per-ip-limit").value =
+        settings.clientsPerIpLimit;
+    document.getElementById("lobby-settings-custom-words-per-turn").value =
+        settings.customWordsPerTurn;
+    document.getElementById("lobby-settings-words-per-turn").value =
+        settings.wordsPerTurn;
+    lobbySettingsPassword.value = "";
+    lobbySettingsClearPassword.checked = false;
+    updateLobbyPasswordStatus(settings.hasPassword);
+}
+
 function saveLobbySettings() {
     fetch(
         `${rootPath}/v1/lobby?` +
@@ -338,12 +499,16 @@ function saveLobbySettings() {
                 words_per_turn: document.getElementById(
                     "lobby-settings-words-per-turn",
                 ).value,
+                password: lobbySettingsPassword.value,
+                clear_password: lobbySettingsClearPassword.checked,
             }),
         {
             method: "PATCH",
         },
     ).then((result) => {
         if (result.status === 200) {
+            lobbySettingsPassword.value = "";
+            lobbySettingsClearPassword.checked = false;
             hideLobbySettingsDialog();
         } else {
             result.text().then((bodyText) => {
@@ -896,6 +1061,26 @@ function onVotekickPlayer(playerId) {
     hideKickDialog();
 }
 
+function onOwnerKickPlayer(playerId) {
+    socket.send(
+        JSON.stringify({
+            type: "owner-kick",
+            data: playerId,
+        }),
+    );
+    hideKickDialog();
+}
+
+function onOwnerForceSpectatePlayer(playerId) {
+    socket.send(
+        JSON.stringify({
+            type: "owner-force-spectate",
+            data: playerId,
+        }),
+    );
+    hideKickDialog();
+}
+
 //This automatically scrolls down the chat on arrivals of new messages
 new MutationObserver(
     () => (messageContainer.scrollTop = messageContainer.scrollHeight),
@@ -928,6 +1113,14 @@ const handleEvent = (parsed) => {
                 "system-message",
                 null,
                 `{{.Translation.Get "guessers-disconnected"}}`,
+            );
+        } else if (
+            parsed.data.roundEndReason === "drawer_forced_spectating"
+        ) {
+            appendMessage(
+                "system-message",
+                null,
+                `{{.Translation.Get "drawer-forced-spectator"}}`,
             );
         } else {
             showRoundEndMessage(ready.previousWord);
@@ -1065,6 +1258,14 @@ const handleEvent = (parsed) => {
                     null,
                     `{{.Translation.Get "guessers-disconnected"}}`,
                 );
+            } else if (
+                parsed.data.roundEndReason === "drawer_forced_spectating"
+            ) {
+                appendMessage(
+                    "system-message",
+                    null,
+                    `{{.Translation.Get "drawer-forced-spectator"}}`,
+                );
             } else {
                 showRoundEndMessage(parsed.data.previousWord);
             }
@@ -1142,6 +1343,24 @@ const handleEvent = (parsed) => {
                 parsed.data.playerName,
             ),
         );
+    } else if (parsed.type === "owner-kick") {
+        if (parsed.data.playerId !== ownID) {
+            appendMessage(
+                "system-message",
+                '{{.Translation.Get "system"}}',
+                '{{.Translation.Get "owner-kicked-player"}}'.format(
+                    parsed.data.playerName,
+                ),
+            );
+        }
+    } else if (parsed.type === "owner-force-spectate") {
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "owner-forced-spectator"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
     } else if (parsed.type === "drawer-kicked") {
         appendMessage(
             "system-message",
@@ -1151,6 +1370,7 @@ const handleEvent = (parsed) => {
     } else if (parsed.type === "lobby-settings-changed") {
         rounds = parsed.data.rounds;
         updateRoundsDisplay();
+        updateLobbySettingsForm(parsed.data);
         updateButtonVisibilities();
         appendMessage(
             "system-message",
@@ -1175,7 +1395,12 @@ const handleEvent = (parsed) => {
                 parsed.data.clientsPerIpLimit +
                 "\n" +
                 '{{.Translation.Get "words-per-turn-setting"}}: ' +
-                parsed.data.wordsPerTurn,
+                parsed.data.wordsPerTurn +
+                "\n" +
+                '{{.Translation.Get "lobby-password-setting"}}: ' +
+                (parsed.data.hasPassword
+                    ? '{{.Translation.Get "lobby-password-set"}}'
+                    : '{{.Translation.Get "lobby-password-not-set"}}'),
         );
     } else if (parsed.type === "shutdown") {
         socket.onclose = null;
@@ -1352,11 +1577,25 @@ const handleReadyEvent = (ready) => {
 };
 
 function updateButtonVisibilities() {
+    const isOwner = ownerID === ownID;
     if (ownerID === ownID) {
         lobbySettingsButton.style.display = "flex";
     } else {
         lobbySettingsButton.style.display = "none";
     }
+
+    kickButtonLabel.innerText = isOwner
+        ? '{{.Translation.Get "manage-players"}}'
+        : '{{.Translation.Get "votekick-a-player"}}';
+    kickButton.title = isOwner
+        ? '{{.Translation.Get "manage-players"}}'
+        : '{{.Translation.Get "votekick-a-player"}}';
+    kickButton.setAttribute(
+        "alt",
+        isOwner
+            ? '{{.Translation.Get "manage-players"}}'
+            : '{{.Translation.Get "votekick-a-player"}}',
+    );
 }
 
 function promptWords(data) {

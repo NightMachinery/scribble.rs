@@ -25,6 +25,7 @@ type LobbySettingDefaults struct {
 	Wordpack           string `env:"WORDPACK"`
 	ScoreCalculation   string `env:"SCORE_CALCULATION"`
 	WordsPerTurn       string `env:"WORDS_PER_TURN"`
+	Password           string `env:"PASSWORD"`
 }
 
 type CORS struct {
