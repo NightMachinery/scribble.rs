@@ -155,8 +155,8 @@ func Test_parseMaxPlayers(t *testing.T) {
 		{"empty value", "", 0, true},
 		{"space", " ", 0, true},
 		{"less than minimum", "1", 0, true},
-		{"more than maximum", "25", 0, true},
-		{"maximum", "24", 24, false},
+		{"more than maximum", "65", 0, true},
+		{"maximum", "64", 64, false},
 		{"minimum", "2", 2, false},
 		{"something valid", "15", 15, false},
 	}

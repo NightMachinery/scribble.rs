@@ -23,6 +23,7 @@ SITE_ADDRESS=''
 ROOT_URL=''
 ROOT_PATH=''
 ROOT_PATH_WITH_SLASH=''
+PUBLIC_HOST=''
 
 usage() {
   cat <<USAGE
@@ -109,6 +110,17 @@ parse_public_url() {
   ROOT_URL="$scheme://$hostport"
   ROOT_PATH_WITH_SLASH="$raw_path"
   ROOT_PATH="${raw_path#/}"
+
+  if [[ "$hostport" == \[* ]]; then
+    PUBLIC_HOST="${hostport#\[}"
+    PUBLIC_HOST="${PUBLIC_HOST%%\]*}"
+  else
+    PUBLIC_HOST="${hostport%%:*}"
+  fi
+}
+
+should_apply_ir_defaults() {
+  [[ "${PUBLIC_HOST:l}" == *.ir ]]
 }
 
 ensure_runtime_dirs() {
@@ -126,6 +138,12 @@ CANONICAL_URL=$ROOT_URL
 ALLOW_INDEXING=false
 ROOT_PATH=$ROOT_PATH
 EOF_ENV
+
+  if should_apply_ir_defaults; then
+    cat >> "$ENV_PATH" <<EOF_IR
+LOBBY_SETTING_DEFAULTS_WORDPACK=Persian_1
+EOF_IR
+  fi
 
   cat > "$STATE_PATH" <<EOF_STATE
 PUBLIC_URL=$PUBLIC_URL

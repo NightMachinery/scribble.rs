@@ -82,6 +82,11 @@ It uses:
 - `ROOT_PATH` = optional path portion
 - Caddy reverse proxy rules that match the same URL/path
 
+If the public URL host ends with `.ir`, the script also writes this lobby
+default override into `.self-host/app.env`:
+
+- `LOBBY_SETTING_DEFAULTS_WORDPACK=Persian_1`
+
 If you deploy under a subpath on a host that is already handled elsewhere in `~/Caddyfile`, you may need to merge the generated block into that existing site block manually.
 
 ## Logs and tmux
