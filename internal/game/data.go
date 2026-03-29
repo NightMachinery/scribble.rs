@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	discordemojimap "github.com/Bios-Marcel/discordemojimap/v2"
@@ -134,6 +135,19 @@ func (player *Player) GetWebsocket() *gws.Conn {
 // SetWebsocket sets the given connection as the players websocket connection.
 func (player *Player) SetWebsocket(socket *gws.Conn) {
 	player.ws = socket
+}
+
+// NextConnectionVersion increments the player's websocket generation and
+// returns the new value. This is used to ignore stale socket events after a
+// reconnect or tab takeover.
+func (player *Player) NextConnectionVersion() uint64 {
+	return atomic.AddUint64(&player.connectionVersion, 1)
+}
+
+// ConnectionVersionMatches indicates whether the supplied websocket
+// generation is still the authoritative one for this player.
+func (player *Player) ConnectionVersionMatches(version uint64) bool {
+	return atomic.LoadUint64(&player.connectionVersion) == version
 }
 
 // GetUserSession returns the players current user session.

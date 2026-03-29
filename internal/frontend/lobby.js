@@ -26,9 +26,9 @@ function showReconnectDialogIfNotShown() {
     }
 }
 
-//Makes sure that the server notices that the player disconnects.
-//Otherwise a refresh (on chromium based browsers) can lead to the server
-//thinking that there's already an open tab with this lobby.
+//Best-effort cleanup so the old page disconnects quickly during navigation.
+//Reconnect correctness must still come from the server, as browsers may skip
+//or delay this during refresh/tab close.
 window.onbeforeunload = () => {
     if (socket) {
         //Avoid unintentionally reestablishing connection.
@@ -2332,6 +2332,12 @@ const connectToWebsocket = () => {
                     reconnectDialogId,
                     "Kicked",
                     `You have been kicked from the lobby.`,
+                );
+            } else if (event.code === 4001) {
+                showTextDialog(
+                    reconnectDialogId,
+                    '{{.Translation.Get "connection-lost"}}',
+                    `{{.Translation.Get "lobby-open-tab-exists"}}`,
                 );
             } else {
                 console.log("Attempting to reestablish socket connection.");

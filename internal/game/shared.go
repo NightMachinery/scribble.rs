@@ -256,6 +256,10 @@ type Player struct {
 	// userSession uniquely identifies the player.
 	userSession uuid.UUID
 	ws          *gws.Conn
+	// connectionVersion is incremented whenever a new websocket takes over
+	// this player session. This allows the server to ignore stale socket
+	// events from replaced connections.
+	connectionVersion uint64
 	// disconnectTime is used to kick a player in case the lobby doesn't have
 	// space for new players. The player with the oldest disconnect.Time will
 	// get kicked.

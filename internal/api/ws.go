@@ -70,9 +70,20 @@ func (handler *V1Handler) websocketUpgrade(writer http.ResponseWriter, request *
 
 		metrics.TrackPlayerConnect()
 
+		previousSocket := player.GetWebsocket()
+		connectionVersion := player.NextConnectionVersion()
+
 		player.SetWebsocket(socket)
-		socket.Session().Store("player", player)
-		socket.Session().Store("lobby", lobby)
+		socket.Session().Store(socketSessionPlayerKey, player)
+		socket.Session().Store(socketSessionLobbyKey, lobby)
+		socket.Session().Store(socketSessionConnectionVersionKey, connectionVersion)
+
+		if previousSocket != nil && previousSocket != socket {
+			if err := previousSocket.WriteClose(closeCodeConnectionReplaced, nil); err != nil && !errors.Is(err, gws.ErrConnClosed) {
+				log.Printf("error closing replaced websocket: %v", err)
+			}
+		}
+
 		lobby.OnPlayerConnectUnsynchronized(player)
 
 		go socket.ReadLoop()
@@ -82,6 +93,13 @@ func (handler *V1Handler) websocketUpgrade(writer http.ResponseWriter, request *
 const (
 	pingInterval = 10 * time.Second
 	pingWait     = 5 * time.Second
+
+	closeCodeKicked             = 4000
+	closeCodeConnectionReplaced = 4001
+
+	socketSessionPlayerKey            = "player"
+	socketSessionLobbyKey             = "lobby"
+	socketSessionConnectionVersionKey = "connectionVersion"
 )
 
 type socketHandler struct{}
@@ -101,21 +119,25 @@ func extract(x any, _ bool) any {
 }
 
 func (c *socketHandler) OnClose(socket *gws.Conn, _ error) {
-	defer socket.Session().Delete("player")
-	defer socket.Session().Delete("lobby")
+	defer socket.Session().Delete(socketSessionPlayerKey)
+	defer socket.Session().Delete(socketSessionLobbyKey)
+	defer socket.Session().Delete(socketSessionConnectionVersionKey)
 
-	player, ok := extract(socket.Session().Load("player")).(*game.Player)
+	player, ok := extract(socket.Session().Load(socketSessionPlayerKey)).(*game.Player)
 	if !ok {
 		return
 	}
-	lobby, ok := extract(socket.Session().Load("lobby")).(*game.Lobby)
+	lobby, ok := extract(socket.Session().Load(socketSessionLobbyKey)).(*game.Lobby)
 	if !ok {
+		return
+	}
+	connectionVersion, ok := extract(socket.Session().Load(socketSessionConnectionVersionKey)).(uint64)
+	if !ok || !player.ConnectionVersionMatches(connectionVersion) || player.GetWebsocket() != socket {
 		return
 	}
 
 	metrics.TrackPlayerDisconnect()
 	lobby.OnPlayerDisconnect(player)
-	player.SetWebsocket(nil)
 }
 
 func (c *socketHandler) OnPing(socket *gws.Conn, _ []byte) {
@@ -131,12 +153,16 @@ func (c *socketHandler) OnMessage(socket *gws.Conn, message *gws.Message) {
 	defer message.Close()
 	defer c.resetDeadline(socket)
 
-	player, ok := extract(socket.Session().Load("player")).(*game.Player)
+	player, ok := extract(socket.Session().Load(socketSessionPlayerKey)).(*game.Player)
 	if !ok {
 		return
 	}
-	lobby, ok := extract(socket.Session().Load("lobby")).(*game.Lobby)
+	lobby, ok := extract(socket.Session().Load(socketSessionLobbyKey)).(*game.Lobby)
 	if !ok {
+		return
+	}
+	connectionVersion, ok := extract(socket.Session().Load(socketSessionConnectionVersionKey)).(uint64)
+	if !ok || !player.ConnectionVersionMatches(connectionVersion) || player.GetWebsocket() != socket {
 		return
 	}
 

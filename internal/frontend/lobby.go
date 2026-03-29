@@ -188,10 +188,6 @@ func (handler *SSRHandler) joinLobbyNoChecks(
 			newPlayer.SetLastKnownAddress(requestAddress)
 			api.SetGameplayCookies(writer, request, newPlayer, lobby)
 		} else {
-			if player.Connected && player.GetWebsocket() != nil {
-				handler.userFacingError(writer, translation.Get("lobby-open-tab-exists"), translation)
-				return
-			}
 			player.SetLastKnownAddress(requestAddress)
 			api.SetGameplayCookies(writer, request, player, lobby)
 		}
