@@ -20,6 +20,11 @@ Array.from(document.getElementsByClassName("number-input")).forEach(
 // we submitted via. This is a dirty hack, but works for now.
 document.getElementById("lobby-create").addEventListener("submit", (event) => {
     const check_box = document.getElementById("public-check-box");
+    document.getElementById("assign_random_names").value = document.getElementById(
+        "assign_random_names_checkbox",
+    ).checked
+        ? "true"
+        : "false";
     if (event.submitter.id === "create-public") {
         check_box.value = "true";
         check_box.setAttribute("checked", "");

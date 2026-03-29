@@ -108,6 +108,11 @@ func CleanText(str string) string {
 			continue
 		}
 
+		if character == '\u200c' {
+			changed = true
+			continue
+		}
+
 		if val, contains := transliterations[character]; contains {
 			buffer = append(buffer, val...)
 			changed = true

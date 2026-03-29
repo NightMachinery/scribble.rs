@@ -207,10 +207,24 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 		}
 
 		handleOwnerForceSpectateEvent(lobby, player, targetID)
+	} else if eventType == EventTypeOwnerForceParticipate {
+		var participateEvent StringDataEvent
+		if err := json.Unmarshal(payload, &participateEvent); err != nil {
+			return fmt.Errorf("invalid data received: '%s'", string(payload))
+		}
+
+		targetID, err := uuid.FromString(participateEvent.Data)
+		if err != nil {
+			return fmt.Errorf("invalid data in owner-force-participate event: %v", payload)
+		}
+
+		handleOwnerForceParticipateEvent(lobby, player, targetID)
+	} else if eventType == EventTypeOwnerForceEndGame {
+		handleOwnerForceEndGameEvent(lobby, player)
 	} else if eventType == EventTypeToggleReadiness {
 		lobby.handleToggleReadinessEvent(player)
 	} else if eventType == EventTypeStart {
-		if lobby.State != Ongoing && player.ID == lobby.OwnerID {
+		if lobby.State != Ongoing && player.ID == lobby.OwnerID && !player.NeedsName {
 			lobby.startGame()
 		}
 	} else if eventType == EventTypeNameChange {
@@ -232,7 +246,7 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 }
 
 func (lobby *Lobby) handleToggleReadinessEvent(player *Player) {
-	if lobby.State != Ongoing && player.State != Spectating {
+	if lobby.State != Ongoing && player.State != Spectating && !player.NeedsName {
 		if player.State != Ready {
 			player.State = Ready
 		} else {
@@ -297,6 +311,10 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 	// Empty message can neither be a correct guess nor are useful for
 	// other players in the chat.
 	if trimmedMessage == "" {
+		return
+	}
+
+	if sender.NeedsName {
 		return
 	}
 
@@ -545,6 +563,35 @@ func handleOwnerForceSpectateEvent(lobby *Lobby, owner *Player, targetID uuid.UU
 	forcePlayerToSpectate(lobby, lobby.players[targetIndex], targetIndex)
 }
 
+func handleOwnerForceParticipateEvent(lobby *Lobby, owner *Player, targetID uuid.UUID) {
+	if owner.ID != lobby.OwnerID || targetID == owner.ID {
+		return
+	}
+
+	targetIndex := getPlayerIndexByID(lobby, targetID)
+	if targetIndex == -1 {
+		return
+	}
+
+	forcePlayerToParticipate(lobby, lobby.players[targetIndex])
+}
+
+func handleOwnerForceEndGameEvent(lobby *Lobby, owner *Player) {
+	if owner.ID != lobby.OwnerID || lobby.State != Ongoing {
+		return
+	}
+
+	lobby.roundEndReason = ownerForcedGameEnd
+	lobby.Broadcast(&Event{
+		Type: EventTypeOwnerForceEndGame,
+		Data: &PlayerEvent{
+			PlayerID:   owner.ID,
+			PlayerName: owner.Name,
+		},
+	})
+	endCurrentGame(lobby, lobby.CurrentWord)
+}
+
 func getPlayerIndexByID(lobby *Lobby, playerID uuid.UUID) int {
 	for index, otherPlayer := range lobby.players {
 		if otherPlayer.ID == playerID {
@@ -658,6 +705,29 @@ func forcePlayerToSpectate(lobby *Lobby, playerToSpectate *Player, playerIndex i
 	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
 }
 
+func forcePlayerToParticipate(lobby *Lobby, playerToParticipate *Player) {
+	if playerToParticipate.State != Spectating {
+		return
+	}
+
+	if lobby.State == Ongoing {
+		playerToParticipate.SpectateToggleRequested = true
+	} else {
+		playerToParticipate.SpectateToggleRequested = false
+		playerToParticipate.State = Standby
+	}
+
+	lobby.Broadcast(&Event{
+		Type: EventTypeOwnerForceParticipate,
+		Data: &PlayerEvent{
+			PlayerID:   playerToParticipate.ID,
+			PlayerName: playerToParticipate.Name,
+		},
+	})
+	recalculateRanks(lobby)
+	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+}
+
 func (lobby *Lobby) Drawer() *Player {
 	for _, player := range lobby.players {
 		if player.State == Drawing {
@@ -688,20 +758,49 @@ func calculateVotesNeededToKick(lobby *Lobby) int {
 
 func handleNameChangeEvent(caller *Player, lobby *Lobby, name string) {
 	oldName := caller.Name
-	newName := SanitizeName(name)
+	oldAutoNamed := caller.AutoNamed
+	oldNeedsName := caller.NeedsName
+	newName, autoNamed, changed := lobby.resolvePlayerName(name, true)
+	if !changed {
+		return
+	}
 
 	// We'll avoid sending the event in this case, as it's useless, but still log
 	// the event, as it might be useful to know that this happened.
-	if oldName != newName {
+	if oldName != newName || oldAutoNamed != autoNamed || oldNeedsName {
 		caller.Name = newName
+		caller.AutoNamed = autoNamed
+		caller.NeedsName = false
 		lobby.Broadcast(&Event{
 			Type: EventTypeNameChange,
 			Data: &NameChangeEvent{
 				PlayerID:   caller.ID,
 				PlayerName: newName,
+				AutoNamed:  autoNamed,
 			},
 		})
 	}
+}
+
+func (lobby *Lobby) resolvePlayerName(name string, rejectEmpty bool) (string, bool, bool) {
+	sanitizedName := SanitizeNameInput(name)
+	if sanitizedName != "" {
+		return sanitizedName, false, true
+	}
+
+	if rejectEmpty && !lobby.AssignRandomNames {
+		return "", false, false
+	}
+
+	if !lobby.AssignRandomNames {
+		return "", false, true
+	}
+
+	return generatePlayerName(), true, true
+}
+
+func isAlwaysVisibleHintCharacter(char rune) bool {
+	return char == ' ' || char == '_' || char == '-' || char == '\u200c'
 }
 
 func (lobby *Lobby) calculateGuesserScore() int {
@@ -777,23 +876,7 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		// We can reach this state if all players are spectating and or are not
 		// connected anymore.
 		if lobby.Round == lobby.Rounds || newDrawer == nil {
-			lobby.State = GameOver
-
-			for _, player := range lobby.players {
-				readyData := generateReadyData(lobby, player)
-				// The drawing is always available on the client, as the
-				// game-over event is only sent to already connected players.
-				readyData.CurrentDrawing = nil
-
-				lobby.WriteObject(player, Event{
-					Type: EventTypeGameOver,
-					Data: &GameOverEvent{
-						PreviousWord:   previousWord,
-						ReadyEvent:     readyData,
-						RoundEndReason: currentRoundEndReason,
-					},
-				})
-			}
+			sendGameOver(lobby, previousWord, currentRoundEndReason)
 
 			// Omit rest of events, since we don't need to advance.
 			return
@@ -826,6 +909,49 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 	go startTurnTimeTicker(lobby, lobby.timeLeftTicker)
 
 	lobby.SendYourTurnEvent(newDrawer)
+}
+
+func endCurrentGame(lobby *Lobby, previousWord string) {
+	if lobby.timeLeftTicker != nil {
+		lobby.timeLeftTicker = nil
+	}
+
+	lobby.wordChoice = nil
+	lobby.wordHints = nil
+	lobby.wordHintsShown = nil
+	lobby.CurrentWord = ""
+	lobby.roundEndTime = 0
+
+	for _, player := range lobby.players {
+		player.SpectateToggleRequested = false
+		if player.State != Spectating {
+			player.State = Standby
+		}
+	}
+
+	recalculateRanks(lobby)
+	sendGameOver(lobby, previousWord, lobby.roundEndReason)
+	lobby.roundEndReason = ""
+}
+
+func sendGameOver(lobby *Lobby, previousWord string, reason roundEndReason) {
+	lobby.State = GameOver
+
+	for _, player := range lobby.players {
+		readyData := generateReadyData(lobby, player)
+		// The drawing is always available on the client, as the
+		// game-over event is only sent to already connected players.
+		readyData.CurrentDrawing = nil
+
+		lobby.WriteObject(player, Event{
+			Type: EventTypeGameOver,
+			Data: &GameOverEvent{
+				PreviousWord:   previousWord,
+				ReadyEvent:     readyData,
+				RoundEndReason: reason,
+			},
+		})
+	}
 }
 
 // advanceLobby will either start the game or jump over to the next turn.
@@ -1106,7 +1232,7 @@ func (lobby *Lobby) selectWord(index int) error {
 		// guesser, those are always shown. An example would be "Pac-Man".
 		// Because these characters aren't relevant for the guess, they
 		// aren't being underlined.
-		isAlwaysVisibleCharacter := char == ' ' || char == '_' || char == '-'
+		isAlwaysVisibleCharacter := isAlwaysVisibleHintCharacter(char)
 
 		// The hints for the drawer are always visible, therefore they
 		// don't require any handling of different cases.
@@ -1321,8 +1447,11 @@ func (lobby *Lobby) GetAvailableWordHints(player *Player) []*WordHint {
 // JoinPlayer creates a new player object using the given name and adds it
 // to the lobbies playerlist. The new players is returned.
 func (lobby *Lobby) JoinPlayer(name string) *Player {
+	sanitizedName, autoNamed, changed := lobby.resolvePlayerName(name, false)
 	player := &Player{
-		Name:              SanitizeName(name),
+		Name:              sanitizedName,
+		AutoNamed:         autoNamed,
+		NeedsName:         !changed || sanitizedName == "",
 		ID:                uuid.Must(uuid.NewV4()),
 		userSession:       uuid.Must(uuid.NewV4()),
 		votedForKick:      make(map[uuid.UUID]bool),

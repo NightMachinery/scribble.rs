@@ -149,5 +149,17 @@ func initHebrewTranslation() {
 
 	translation.put("forbidden", "לא ניתן להציג דף זה")
 
+	translation.put("force-player-participation", "Allow playing")
+	translation.put("force-end-game", "End current game")
+	translation.put("force-end-game-confirm", "End the current game now?")
+	translation.put("owner-forced-participation", "%s was restored to active play by the lobby owner.")
+	translation.put("owner-ended-game", "%s ended the current game.")
+	translation.put("assign-random-names-setting", "Give new players random names")
+	translation.put("choose-name-placeholder", "Choose a name")
+	translation.put("name-required-title", "Choose a name")
+	translation.put("name-required-text", "You need to choose a name before you can play or chat.")
+	translation.put("player-now-participating", "%s is now participating")
+	translation.put("player-now-spectating", "%s is now spectating")
+
 	RegisterTranslation("he", translation)
 }

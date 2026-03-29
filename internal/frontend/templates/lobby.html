@@ -34,6 +34,11 @@
 
                 <div id="lobby-header-center-element">
                     <div id="menu-button-container">
+                        <button id="copy-lobby-link-header-button" class="dialog-button header-copy-link-button" style="display: none;"
+                            alt="{{.Translation.Get "copy-lobby-link"}}"
+                            title="{{.Translation.Get "copy-lobby-link"}}">
+                            {{.Translation.Get "copy-lobby-link"}}
+                        </button>
                         <button id="menu-button" popovertarget="menu" alt="Show menu" title="Show menu">
                             <img src='{{.RootPath}}/resources/{{.WithCacheBust "menu.svg"}}'
                                 class="header-button-image" />
@@ -83,7 +88,7 @@
                                         class="header-button-image" />
                                     {{.Translation.Get "show-help"}}
                                 </button>
-                                <button id="copy-lobby-link-button" class="dialog-button menu-item header-button"
+                                <button id="copy-lobby-link-menu-button" class="dialog-button menu-item header-button"
                                     alt="{{.Translation.Get "copy-lobby-link"}}"
                                     title="{{.Translation.Get "copy-lobby-link"}}">
                                     <img src='{{.RootPath}}/resources/{{.WithCacheBust "user.svg"}}'
@@ -218,6 +223,9 @@
                                     <input id="lobby-settings-clients-per-ip-limit" type="number"
                                         name="clients_per_ip_limit" min="{{.MinClientsPerIPLimit}}"
                                         max="{{.MaxClientsPerIPLimit}}" value="{{.ClientsPerIPLimit}}" />
+                                    <b>{{.Translation.Get "assign-random-names-setting"}}</b>
+                                    <input id="lobby-settings-assign-random-names" type="checkbox" name="assign_random_names" {{if eq
+                                            .AssignRandomNames true}}checked{{end}} />
                                     <b>{{.Translation.Get "lobby-password-setting"}}</b>
                                     <input id="lobby-settings-password" type="password" name="password"
                                         placeholder="{{.Translation.Get "lobby-password-placeholder"}}" />
@@ -259,6 +267,9 @@
                                 <div id="kick-dialog-players"></div>
                             </div>
                             <div class="button-bar">
+                                <button id="owner-force-end-game-button" class="dialog-button" style="display: none;">
+                                    {{.Translation.Get "force-end-game"}}
+                                </button>
                                 <button id="kick-close-button"
                                     class="dialog-button">{{.Translation.Get "close"}}</button>
                             </div>

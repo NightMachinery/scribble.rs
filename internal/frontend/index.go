@@ -197,6 +197,10 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	publicLobby, publicLobbyInvalid := api.ParseBoolean("public", request.Form.Get("public"))
 	wordsPerTurn, wordsPerTurnInvalid := api.ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
 	lobbyPassword, lobbyPasswordInvalid := api.ParseLobbyPassword(request.Form.Get("password"))
+	assignRandomNames, assignRandomNamesInvalid := api.ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
+	if request.Form.Get("assign_random_names") == "" {
+		assignRandomNames = true
+	}
 
 	if wordsPerTurn < customWordsPerTurn {
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
@@ -227,6 +231,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 			ScoreCalculation:   request.Form.Get("score_calculation"),
 			WordsPerTurn:       request.Form.Get("words_per_turn"),
 			Password:           request.Form.Get("password"),
+			AssignRandomNames:  request.Form.Get("assign_random_names"),
 		},
 		Wordpack:          requestedWordpack,
 		Wordpacks:         game.SupportedWordpacks,
@@ -269,6 +274,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	if lobbyPasswordInvalid != nil {
 		pageData.Errors = append(pageData.Errors, lobbyPasswordInvalid.Error())
 	}
+	if assignRandomNamesInvalid != nil {
+		pageData.Errors = append(pageData.Errors, assignRandomNamesInvalid.Error())
+	}
 
 	translation, locale := determineTranslation(request)
 	pageData.Translation = translation
@@ -301,6 +309,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		ClientsPerIPLimit:  clientsPerIPLimit,
 		Public:             publicLobby,
 		WordsPerTurn:       wordsPerTurn,
+		AssignRandomNames:  assignRandomNames,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName, wordpackKey,
 		lobbySettings, customWords, scoreCalculation)

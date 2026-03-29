@@ -26,6 +26,7 @@ type LobbySettingDefaults struct {
 	ScoreCalculation   string `env:"SCORE_CALCULATION"`
 	WordsPerTurn       string `env:"WORDS_PER_TURN"`
 	Password           string `env:"PASSWORD"`
+	AssignRandomNames  string `env:"ASSIGN_RANDOM_NAMES"`
 }
 
 type CORS struct {
@@ -89,6 +90,7 @@ var Default = Config{
 		Wordpack:           "english",
 		ScoreCalculation:   "chill",
 		WordsPerTurn:       "5",
+		AssignRandomNames:  "true",
 	},
 	LobbySettingBounds: game.SettingBounds{
 		MinDrawingTime:        60,

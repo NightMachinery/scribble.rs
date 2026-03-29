@@ -52,17 +52,29 @@ const centerDialogs = document.getElementById("center-dialogs");
 const waitChooseDialog = document.getElementById("waitchoose-dialog");
 const waitChooseDrawerSpan = document.getElementById("waitchoose-drawer");
 const namechangeDialog = document.getElementById("namechange-dialog");
+const namechangeCloseButton = document.getElementById("namechange-close-button");
 const namechangeFieldStartDialog = document.getElementById(
     "namechange-field-start-dialog",
 );
 const namechangeField = document.getElementById("namechange-field");
 
-const copyLobbyLinkButton = document.getElementById("copy-lobby-link-button");
+const copyLobbyLinkHeaderButton = document.getElementById(
+    "copy-lobby-link-header-button",
+);
+const copyLobbyLinkMenuButton = document.getElementById(
+    "copy-lobby-link-menu-button",
+);
 const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
+const ownerForceEndGameButton = document.getElementById(
+    "owner-force-end-game-button",
+);
 const lobbySettingsButton = document.getElementById("lobby-settings-button");
 const lobbySettingsDialog = document.getElementById("lobbysettings-dialog");
 const lobbySettingsPassword = document.getElementById("lobby-settings-password");
+const lobbySettingsAssignRandomNames = document.getElementById(
+    "lobby-settings-assign-random-names",
+);
 const lobbySettingsClearPassword = document.getElementById(
     "lobby-settings-clear-password",
 );
@@ -174,6 +186,22 @@ function closeDialog(id) {
             parent.removeChild(dialog);
         }
     }
+}
+
+function getDisplayPlayerName(player) {
+    if (!player) {
+        return "";
+    }
+
+    if (player.needsName && player.name === "") {
+        return '{{.Translation.Get "choose-name-placeholder"}}';
+    }
+
+    return player.name;
+}
+
+function getOwnPlayer() {
+    return getCachedPlayer(ownID);
 }
 
 const helpDialogId = "help-dialog";
@@ -306,7 +334,8 @@ async function copyLobbyLink() {
         showCopyLobbyLinkFallback(lobbyURL);
     }
 }
-copyLobbyLinkButton.addEventListener("click", copyLobbyLink);
+copyLobbyLinkHeaderButton.addEventListener("click", copyLobbyLink);
+copyLobbyLinkMenuButton.addEventListener("click", copyLobbyLink);
 
 function showKickDialog() {
     hideMenu();
@@ -327,7 +356,7 @@ function showKickDialog() {
 
                     const playerName = document.createElement("span");
                     playerName.classList.add("kick-player-name");
-                    playerName.innerText = player.name;
+                    playerName.innerText = getDisplayPlayerName(player);
 
                     const playerActions = document.createElement("div");
                     playerActions.classList.add("kick-player-actions");
@@ -341,7 +370,19 @@ function showKickDialog() {
 
                     playerActions.appendChild(kickButton);
 
-                    if (player.state !== "spectating") {
+                    if (player.state === "spectating") {
+                        const participateButton =
+                            document.createElement("button");
+                        participateButton.classList.add("dialog-button");
+                        participateButton.classList.add(
+                            "kick-player-action-button",
+                        );
+                        participateButton.onclick = () =>
+                            onOwnerForceParticipatePlayer(player.id);
+                        participateButton.innerText =
+                            '{{.Translation.Get "force-player-participation"}}';
+                        playerActions.appendChild(participateButton);
+                    } else {
                         const spectateButton = document.createElement("button");
                         spectateButton.classList.add("dialog-button");
                         spectateButton.classList.add(
@@ -361,11 +402,14 @@ function showKickDialog() {
                     playerKickEntry.classList.add("kick-player-button");
                     playerKickEntry.classList.add("dialog-button");
                     playerKickEntry.onclick = () => onVotekickPlayer(player.id);
-                    playerKickEntry.innerText = player.name;
+                    playerKickEntry.innerText = getDisplayPlayerName(player);
                     kickDialogPlayers.appendChild(playerKickEntry);
                 }
             }
         });
+
+        ownerForceEndGameButton.style.display =
+            isOwner && gameState === "ongoing" ? "inline-block" : "none";
 
         kickDialog.style.visibility = "visible";
     }
@@ -381,17 +425,60 @@ document
     .getElementById("kick-close-button")
     .addEventListener("click", hideKickDialog);
 
-function showNameChangeDialog() {
+function onOwnerForceParticipatePlayer(playerID) {
+    socket.send(
+        JSON.stringify({
+            type: "owner-force-participate",
+            data: playerID,
+        }),
+    );
+    hideKickDialog();
+}
+
+function onOwnerForceEndGame() {
+    if (!window.confirm('{{.Translation.Get "force-end-game-confirm"}}')) {
+        return;
+    }
+
+    socket.send(
+        JSON.stringify({
+            type: "owner-force-end-game",
+        }),
+    );
+    hideKickDialog();
+}
+ownerForceEndGameButton.addEventListener("click", onOwnerForceEndGame);
+
+function syncNameChangeFields(name) {
+    namechangeFieldStartDialog.value = name;
+    namechangeField.value = name;
+}
+
+function showNameChangeDialog(clearAutoNamed) {
     hideMenu();
 
+    const ownPlayer = getOwnPlayer();
+    const mustChooseName = ownPlayer && ownPlayer.needsName;
+    const shouldClear =
+        mustChooseName || (clearAutoNamed && ownPlayer && ownPlayer.autoNamed);
+
+    namechangeCloseButton.style.display = mustChooseName ? "none" : "";
     namechangeDialog.style.visibility = "visible";
+    namechangeField.value = shouldClear ? "" : ownName;
     namechangeField.focus();
+    if (shouldClear) {
+        namechangeField.select();
+    }
 }
 document
     .getElementById("name-change-button")
-    .addEventListener("click", showNameChangeDialog);
+    .addEventListener("click", () => showNameChangeDialog(true));
 
 function hideNameChangeDialog() {
+    const ownPlayer = getOwnPlayer();
+    if (ownPlayer && ownPlayer.needsName) {
+        return;
+    }
     namechangeDialog.style.visibility = "hidden";
 }
 document
@@ -399,8 +486,20 @@ document
     .addEventListener("click", hideNameChangeDialog);
 
 function changeName(name) {
+    const ownPlayer = getOwnPlayer();
+    const trimmedName = name.trim();
+    if (!assignRandomNames && trimmedName === "") {
+        showInfoDialog(
+            '{{.Translation.Get "name-required-title"}}',
+            '{{.Translation.Get "name-required-text"}}',
+            '{{.Translation.Get "confirm"}}',
+        );
+        showNameChangeDialog(true);
+        return;
+    }
+
     //Avoid unnecessary traffic.
-    if (name !== ownName) {
+    if (name !== ownName || (ownPlayer && ownPlayer.autoNamed && trimmedName === "")) {
         socket.send(
             JSON.stringify({
                 type: "name-change",
@@ -418,13 +517,30 @@ document
     });
 document.getElementById("namechange-button").addEventListener("click", () => {
     changeName(document.getElementById("namechange-field").value);
-    hideNameChangeDialog();
+    if (!(getOwnPlayer() && getOwnPlayer().needsName)) {
+        hideNameChangeDialog();
+    }
 });
 
 function setUsernameLocally(name) {
     ownName = name;
-    namechangeFieldStartDialog.value = name;
-    namechangeField.value = name;
+    syncNameChangeFields(name);
+}
+
+function applyNameRequirementState() {
+    const ownPlayer = getOwnPlayer();
+    const mustChooseName = ownPlayer && ownPlayer.needsName;
+    messageInput.disabled = mustChooseName;
+    document.getElementById("ready-state-start").disabled = mustChooseName;
+    document.getElementById("ready-state-game-over").disabled = mustChooseName;
+    forceStartButton.disabled = mustChooseName;
+    forceRestartButton.disabled = mustChooseName;
+
+    if (mustChooseName) {
+        showNameChangeDialog(true);
+    } else {
+        namechangeCloseButton.style.display = "";
+    }
 }
 
 function toggleFullscreen() {
@@ -463,6 +579,7 @@ function updateLobbySettingsForm(settings) {
     document.getElementById("lobby-settings-max-rounds").value =
         settings.rounds;
     document.getElementById("lobby-settings-public").checked = settings.public;
+    lobbySettingsAssignRandomNames.checked = settings.assignRandomNames;
     document.getElementById("lobby-settings-max-players").value =
         settings.maxPlayers;
     document.getElementById("lobby-settings-clients-per-ip-limit").value =
@@ -473,6 +590,7 @@ function updateLobbySettingsForm(settings) {
         settings.wordsPerTurn;
     lobbySettingsPassword.value = "";
     lobbySettingsClearPassword.checked = false;
+    assignRandomNames = settings.assignRandomNames;
     updateLobbyPasswordStatus(settings.hasPassword);
 }
 
@@ -493,6 +611,7 @@ function saveLobbySettings() {
                 clients_per_ip_limit: document.getElementById(
                     "lobby-settings-clients-per-ip-limit",
                 ).value,
+                assign_random_names: lobbySettingsAssignRandomNames.checked,
                 custom_words_per_turn: document.getElementById(
                     "lobby-settings-custom-words-per-turn",
                 ).value,
@@ -1096,6 +1215,7 @@ let rounds = 0;
 let roundEndTime = 0;
 let gameState = "unstarted";
 let drawingTimeSetting = "∞";
+let assignRandomNames = lobbySettingsAssignRandomNames.checked;
 
 const handleEvent = (parsed) => {
     if (parsed.type === "ready") {
@@ -1122,29 +1242,42 @@ const handleEvent = (parsed) => {
                 null,
                 `{{.Translation.Get "drawer-forced-spectator"}}`,
             );
+        } else if (
+            parsed.data.roundEndReason === "owner_forced_game_end"
+        ) {
+            // The dedicated owner-force-end-game event already announced this.
         } else {
             showRoundEndMessage(ready.previousWord);
         }
         handleReadyEvent(ready);
     } else if (parsed.type === "update-players") {
         applyPlayers(parsed.data);
+        applyNameRequirementState();
     } else if (parsed.type === "name-change") {
         const player = getCachedPlayer(parsed.data.playerId);
+        const changedPlayer = player ?? {
+            name: parsed.data.playerName,
+            needsName: parsed.data.needsName,
+        };
         if (player !== null) {
             player.name = parsed.data.playerName;
+            player.autoNamed = parsed.data.autoNamed;
+            player.needsName = parsed.data.needsName;
         }
 
         const playernameSpan = document.getElementById(
             "playername-" + parsed.data.playerId,
         );
         if (playernameSpan !== null) {
-            playernameSpan.innerText = parsed.data.playerName;
+            playernameSpan.innerText = getDisplayPlayerName(changedPlayer);
         }
         if (parsed.data.playerId === ownID) {
             setUsernameLocally(parsed.data.playerName);
+            applyNameRequirementState();
+            hideNameChangeDialog();
         }
         if (parsed.data.playerId === drawerID) {
-            waitChooseDrawerSpan.innerText = parsed.data.playerName;
+            waitChooseDrawerSpan.innerText = getDisplayPlayerName(changedPlayer);
         }
     } else if (parsed.type === "correct-guess") {
         playWav('{{.RootPath}}/resources/{{.WithCacheBust "plop.wav"}}');
@@ -1162,7 +1295,7 @@ const handleEvent = (parsed) => {
                     "correct-guess-message-other-player",
                     null,
                     `{{.Translation.Get "correct-guess-other-player"}}`.format(
-                        player.name,
+                        getDisplayPlayerName(player),
                     ),
                 );
             }
@@ -1273,6 +1406,7 @@ const handleEvent = (parsed) => {
             //First turn, the game starts
             gameState = "ongoing";
         }
+        updateButtonVisibilities();
 
         //As soon as a turn starts, the round should be ongoing, so we make
         //sure that all types of dialogs, that indicate the game isn't
@@ -1361,6 +1495,22 @@ const handleEvent = (parsed) => {
                 parsed.data.playerName,
             ),
         );
+    } else if (parsed.type === "owner-force-participate") {
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "owner-forced-participation"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
+    } else if (parsed.type === "owner-force-end-game") {
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "owner-ended-game"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
     } else if (parsed.type === "drawer-kicked") {
         appendMessage(
             "system-message",
@@ -1393,6 +1543,9 @@ const handleEvent = (parsed) => {
                 "\n" +
                 '{{.Translation.Get "players-per-ip-limit-setting"}}: ' +
                 parsed.data.clientsPerIpLimit +
+                "\n" +
+                '{{.Translation.Get "assign-random-names-setting"}}: ' +
+                parsed.data.assignRandomNames +
                 "\n" +
                 '{{.Translation.Get "words-per-turn-setting"}}: ' +
                 parsed.data.wordsPerTurn +
@@ -1478,6 +1631,7 @@ const handleReadyEvent = (ready) => {
 
     if (ready.players && ready.players.length) {
         applyPlayers(ready.players);
+        applyNameRequirementState();
     }
     if (ready.currentDrawing && ready.currentDrawing.length) {
         applyDrawData(ready.currentDrawing);
@@ -1499,6 +1653,8 @@ const handleReadyEvent = (ready) => {
         gameOverDialog.style.visibility = "visible";
         if (ownerID === ownID) {
             forceRestartButton.style.display = "block";
+        } else {
+            forceRestartButton.style.display = "none";
         }
 
         gameOverScoreboard.innerHTML = "";
@@ -1542,7 +1698,7 @@ const handleReadyEvent = (ready) => {
 
                 const scoreboardNameDiv = document.createElement("div");
                 scoreboardNameDiv.classList.add("gameover-scoreboard-name");
-                scoreboardNameDiv.innerText = player.name;
+                scoreboardNameDiv.innerText = getDisplayPlayerName(player);
                 newScoreboardEntry.appendChild(scoreboardNameDiv);
 
                 const scoreboardScoreSpan = document.createElement("span");
@@ -1583,6 +1739,11 @@ function updateButtonVisibilities() {
     } else {
         lobbySettingsButton.style.display = "none";
     }
+
+    copyLobbyLinkHeaderButton.style.display =
+        gameState === "ongoing" ? "none" : "inline-flex";
+    copyLobbyLinkMenuButton.style.display =
+        gameState === "ongoing" ? "flex" : "none";
 
     kickButtonLabel.innerText = isOwner
         ? '{{.Translation.Get "manage-players"}}'
@@ -1717,7 +1878,7 @@ function applyPlayers(players) {
         // disconnects after being assigned the drawer.
         if (matchOngoing && player.state === "drawing") {
             drawerID = player.id;
-            drawerName = player.name;
+            drawerName = getDisplayPlayerName(player);
         }
 
         //We don't wanna show the disconnected players.
@@ -1741,7 +1902,9 @@ function applyPlayers(players) {
             appendMessage(
                 "system-message",
                 '{{.Translation.Get "system"}}',
-                `${player.name} is now participating`,
+                `{{.Translation.Get "player-now-participating"}}`.format(
+                    getDisplayPlayerName(player),
+                ),
             );
         } else if (
             oldPlayer &&
@@ -1751,7 +1914,9 @@ function applyPlayers(players) {
             appendMessage(
                 "system-message",
                 '{{.Translation.Get "system"}}',
-                `${player.name} is now spectating`,
+                `{{.Translation.Get "player-now-spectating"}}`.format(
+                    getDisplayPlayerName(player),
+                ),
             );
         }
 
@@ -1799,10 +1964,11 @@ function applyPlayers(players) {
 
         const playernameSpan = document.createElement("span");
         playernameSpan.classList.add("playername");
-        playernameSpan.innerText = player.name;
+        playernameSpan.innerText = getDisplayPlayerName(player);
         playernameSpan.id = "playername-" + player.id;
         if (player.id === ownID) {
             playernameSpan.classList.add("playername-self");
+            playernameSpan.onclick = () => showNameChangeDialog(true);
         }
         playerDiv.appendChild(playernameSpan);
 

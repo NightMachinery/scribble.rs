@@ -141,6 +141,11 @@
                                 </label>
                                 <textarea class="input-item" name="custom_words" id="custom_words"
                                     placeholder="{{.Translation.Get "custom-words-placeholder"}}">{{.CustomWords}}</textarea>
+                                <label class="lobby-create-label" for="assign_random_names_checkbox">
+                                    {{.Translation.Get "assign-random-names-setting"}}
+                                </label>
+                                <input class="input-item" type="checkbox" id="assign_random_names_checkbox" {{if ne .AssignRandomNames "false"}}checked{{end}}>
+                                <input type="hidden" id="assign_random_names" name="assign_random_names" value="{{if eq .AssignRandomNames "false"}}false{{else}}true{{end}}">
                                 <label class="lobby-create-label" for="password">
                                     {{.Translation.Get "lobby-password-setting"}}
                                 </label>

@@ -129,6 +129,11 @@ func Test_simplifyText(t *testing.T) {
 			input: " ",
 			want:  "",
 		},
+		{
+			name:  "persian halfspace",
+			input: "\u200c",
+			want:  "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -625,4 +630,192 @@ func Test_ownerForceSpectateDrawer(t *testing.T) {
 
 	require.Equal(t, Spectating, target.State)
 	require.Equal(t, replacement, lobby.Drawer())
+}
+
+func Test_wordHintsShowPersianHalfspace(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       10,
+			Rounds:            2,
+			WordsPerTurn:      1,
+			AssignRandomNames: true,
+		},
+		ScoreCalculation: ChillScoring,
+		words:            []string{"a\u200cb"},
+	}
+	wordHintEvents := make(map[uuid.UUID][]*WordHint)
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = func(player *Player, message *gws.Broadcaster) error {
+		data := getUnexportedField(reflect.ValueOf(message).Elem().FieldByName("payload")).([]byte)
+		type outgoingEvent struct {
+			Type string          `json:"type"`
+			Data json.RawMessage `json:"data"`
+		}
+		var event outgoingEvent
+		require.NoError(t, json.Unmarshal(data, &event))
+		if event.Type == EventTypeWordChosen {
+			var chosen WordChosen
+			require.NoError(t, json.Unmarshal(event.Data, &chosen))
+			wordHintEvents[player.ID] = chosen.Hints
+		}
+		return nil
+	}
+
+	drawer := lobby.JoinPlayer("Drawer")
+	drawer.Connected = true
+	lobby.OwnerID = drawer.ID
+
+	guesser := lobby.JoinPlayer("Guesser")
+	guesser.Connected = true
+
+	require.NoError(t, lobby.HandleEvent(EventTypeStart, nil, drawer))
+	require.NoError(t, lobby.HandleEvent(EventTypeChooseWord, []byte(`{"data":0}`), drawer))
+
+	hints := wordHintEvents[guesser.ID]
+	require.Len(t, hints, 3)
+	require.Equal(t, rune('\u200c'), hints[1].Character)
+	require.False(t, hints[1].Underline)
+}
+
+func Test_ownerForceParticipateDuringOngoingQueuesReturn(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+		State: Ongoing,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = true
+	target.State = Spectating
+
+	payload, err := json.Marshal(Event{
+		Type: EventTypeOwnerForceParticipate,
+		Data: target.ID.String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, lobby.HandleEvent(EventTypeOwnerForceParticipate, payload, owner))
+
+	require.Equal(t, Spectating, target.State)
+	require.True(t, target.SpectateToggleRequested)
+}
+
+func Test_ownerForceParticipateOutsideOngoingRestoresImmediately(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+		State: Unstarted,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = true
+	target.State = Spectating
+
+	payload, err := json.Marshal(Event{
+		Type: EventTypeOwnerForceParticipate,
+		Data: target.ID.String(),
+	})
+	require.NoError(t, err)
+	require.NoError(t, lobby.HandleEvent(EventTypeOwnerForceParticipate, payload, owner))
+
+	require.Equal(t, Standby, target.State)
+	require.False(t, target.SpectateToggleRequested)
+}
+
+func Test_ownerForceEndGameSendsGameOver(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+		State:            Ongoing,
+		CurrentWord:      "secret",
+		ScoreCalculation: ChillScoring,
+	}
+
+	var events []GameOverEvent
+	lobby.WriteObject = func(_ *Player, message any) error {
+		switch event := message.(type) {
+		case Event:
+			if event.Type == EventTypeGameOver {
+				events = append(events, *event.Data.(*GameOverEvent))
+			}
+		case *Event:
+			if event.Type == EventTypeGameOver {
+				events = append(events, *event.Data.(*GameOverEvent))
+			}
+		}
+		return nil
+	}
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+	owner.Score = 42
+
+	other := lobby.JoinPlayer("other")
+	other.Connected = true
+	other.Score = 13
+
+	require.NoError(t, lobby.HandleEvent(EventTypeOwnerForceEndGame, nil, owner))
+
+	require.Equal(t, GameOver, lobby.State)
+	require.Empty(t, lobby.CurrentWord)
+	require.Len(t, events, 2)
+	require.Equal(t, "secret", events[0].PreviousWord)
+	require.Equal(t, ownerForcedGameEnd, events[0].RoundEndReason)
+}
+
+func Test_JoinPlayerWithoutRandomNamesRequiresName(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: false,
+		},
+	}
+
+	player := lobby.JoinPlayer("")
+	require.True(t, player.NeedsName)
+	require.False(t, player.AutoNamed)
+	require.Empty(t, player.Name)
+}
+
+func Test_handleNameChangeEventRejectsBlankNameWhenRandomNamesDisabled(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: false,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	player := lobby.JoinPlayer("Kevin")
+	handleNameChangeEvent(player, lobby, "")
+
+	require.Equal(t, "Kevin", player.Name)
+	require.False(t, player.NeedsName)
 }

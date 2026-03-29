@@ -373,6 +373,11 @@ kbd {
     user-select: none;
 }
 
+.header-copy-link-button {
+    white-space: nowrap;
+    font-size: 1rem;
+}
+
 .header-button-image {
     width: 1.7rem;
     height: 1.7rem;
@@ -518,6 +523,8 @@ kbd {
 
 .playername-self {
     font-weight: bold;
+    cursor: pointer;
+    text-decoration: underline dotted;
 }
 
 .player-done {
@@ -767,6 +774,11 @@ kbd {
         height: 1.2rem;
     }
 
+    .header-copy-link-button {
+        font-size: 0.85rem;
+        padding: 0.35rem 0.6rem;
+    }
+
     .hint {
         font-size: 1.1rem;
         line-height: 1.1rem;
@@ -806,6 +818,8 @@ kbd {
 
 #menu-button-container {
     position: relative;
+    display: flex;
+    gap: 0.25rem;
 }
 
 #menu-button {

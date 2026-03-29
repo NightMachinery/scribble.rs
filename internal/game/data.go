@@ -24,6 +24,7 @@ const (
 	drawerDisconnected   roundEndReason = "drawer_disconnected"
 	drawerForcedSpectate roundEndReason = "drawer_forced_spectating"
 	guessersDisconnected roundEndReason = "guessers_disconnected"
+	ownerForcedGameEnd   roundEndReason = "owner_forced_game_end"
 )
 
 // Lobby represents a game session. It must not be sent via the API, as it
@@ -236,9 +237,9 @@ func (lobby *Lobby) AppendFill(fill *FillEvent) {
 	lobby.currentDrawing = append(lobby.currentDrawing, fill)
 }
 
-// SanitizeName removes invalid characters from the players name, resolves
-// emoji codes, limits the name length and generates a new name if necessary.
-func SanitizeName(name string) string {
+// SanitizeNameInput removes invalid characters from the players name, resolves
+// emoji codes and limits the name length. Empty names stay empty.
+func SanitizeNameInput(name string) string {
 	// We trim and handle emojis beforehand to avoid taking this into account
 	// when checking the name length, so we don't cut off too much of the name.
 	newName := discordemojimap.Replace(strings.TrimSpace(name))
@@ -248,6 +249,13 @@ func SanitizeName(name string) string {
 		return newName[:MaxPlayerNameLength+1]
 	}
 
+	return newName
+}
+
+// SanitizeName removes invalid characters from the players name, resolves
+// emoji codes, limits the name length and generates a new name if necessary.
+func SanitizeName(name string) string {
+	newName := SanitizeNameInput(name)
 	if newName != "" {
 		return newName
 	}
