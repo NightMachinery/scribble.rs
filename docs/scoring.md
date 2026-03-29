@@ -18,6 +18,23 @@ There are two built-in scoring modes:
 
 Both use the same formulas. They only differ in constants.
 
+## What `LastScore` means
+
+`LastScore` is a player's score for the current round, or, once the round has
+ended, the score they most recently earned in the previous round.
+
+It is used for three things:
+
+- showing the per-turn score change in the UI
+- calculating the drawer's score at round end
+- rolling back a round's points when the drawer is kicked or forcibly spectated
+
+Typical values:
+
+- correct guesser: their earned points for that round
+- drawer: the drawer score computed at round end
+- player who did not guess correctly that round: `0`
+
 ## When points are awarded
 
 ### Guessers
@@ -30,11 +47,17 @@ An active guesser gets points immediately after an exact correct guess in `handl
 
 Close guesses do not award points.
 
+So for guessers, `LastScore` means "the points this player earned for this
+round's guess."
+
 ### Drawer
 
 The drawer gets points only when the round advances in `advanceLobbyPredefineDrawer`.
 
 The drawer's `LastScore` is calculated from the other players' scores for that round, then added to the drawer's total `Score`.
+
+So for the drawer, `LastScore` means "the drawer bonus for the round that just
+ended."
 
 ## Guesser score formula
 
@@ -136,9 +159,50 @@ Eligibility rules from `CalculateDrawerScore`:
 
 This means:
 
-- if nobody guessed correctly, the drawer often gets `0`
+- if nobody guessed correctly, the drawer gets `0`
 - if some players guessed correctly and then disconnected, their round score can still count toward the drawer average
 - the result is truncated to an integer because it uses integer division
+
+More concretely, the drawer gets more points when the average `LastScore` of
+eligible non-drawer players is higher.
+
+That means the drawer is rewarded indirectly for:
+
+- players guessing earlier rather than later
+- players guessing before more hints are revealed
+- more connected players guessing correctly instead of staying at `0`
+
+### Does a player who never guesses lower the drawer score?
+
+Usually yes.
+
+If a non-drawer player stays connected for the round and never guesses
+correctly, they still count in the drawer-score average with:
+
+- `LastScore = 0`
+
+That lowers the average unless the drawer score was already `0`.
+
+Example:
+
+- two connected guessers
+- one scores `200`
+- one never guesses and stays at `0`
+- drawer score = `(200 + 0) / 2 = 100`
+
+If both had guessed for `200`, the drawer score would have been `200`.
+
+### Does "more players guessed correctly" always increase drawer score?
+
+For connected non-drawer players, yes in the normal case: connected players are
+already part of the average even before they guess, so changing one player's
+`LastScore` from `0` to a positive value increases the drawer score.
+
+For disconnected players, the rule is slightly different: a disconnected player
+with `LastScore == 0` is ignored entirely, while a disconnected player with
+`LastScore > 0` is included. So a disconnected player's correct guess can raise
+or lower the final average depending on how their score compares to the current
+average.
 
 ## When points are removed or suppressed
 
