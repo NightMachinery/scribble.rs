@@ -1,5 +1,9 @@
 const discordInstanceId = getCookie("discord-instance-id");
 const rootPath = `${discordInstanceId ? ".proxy/" : ""}{{.RootPath}}`;
+const clientIdCookieName = "client-id";
+const clientIdStorageKey = "scribble.client-id";
+restoreClientIdCookieFromLocalStorage();
+persistClientIdFromCookie();
 
 Array.from(document.getElementsByClassName("number-input")).forEach(
     (number_input) => {
@@ -247,6 +251,39 @@ function getCookie(name) {
         cookie[split[0].trim()] = split.slice(1).join("=");
     });
     return cookie[name];
+}
+
+function setCookie(name, value, maxAgeSeconds) {
+    let cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Strict`;
+    if (maxAgeSeconds !== undefined) {
+        cookie += `; Max-Age=${maxAgeSeconds}`;
+    }
+    if (window.location.protocol === "https:") {
+        cookie += "; Secure";
+    }
+    document.cookie = cookie;
+}
+
+function persistClientIdFromCookie() {
+    const clientId = getCookie(clientIdCookieName);
+    if (clientId) {
+        localStorage.setItem(clientIdStorageKey, clientId);
+    }
+}
+
+function restoreClientIdCookieFromLocalStorage() {
+    const clientIdCookie = getCookie(clientIdCookieName);
+    if (clientIdCookie) {
+        localStorage.setItem(clientIdStorageKey, clientIdCookie);
+        return clientIdCookie;
+    }
+
+    const storedClientId = localStorage.getItem(clientIdStorageKey);
+    if (storedClientId) {
+        setCookie(clientIdCookieName, storedClientId, 365 * 24 * 60 * 60);
+    }
+
+    return storedClientId;
 }
 
 // Makes sure, that navigating back after creating a lobby also shows it in the list.

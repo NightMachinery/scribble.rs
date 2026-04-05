@@ -4,9 +4,15 @@ String.prototype.format = function () {
 
 const discordInstanceId = getCookie("discord-instance-id");
 const rootPath = `${discordInstanceId ? ".proxy/" : ""}{{.RootPath}}`;
+const clientIdCookieName = "client-id";
+const clientIdStorageKey = "scribble.client-id";
+restoreClientIdCookieFromLocalStorage();
+persistClientIdFromCookie();
 
 let socketIsConnecting = false;
 let hasSocketEverConnected = false;
+let reconnectAttempts = 0;
+let reconnectTimer = null;
 let socket;
 
 const reconnectDialogId = "reconnect-dialog";
@@ -30,6 +36,7 @@ function showReconnectDialogIfNotShown() {
 //Reconnect correctness must still come from the server, as browsers may skip
 //or delay this during refresh/tab close.
 window.onbeforeunload = () => {
+    clearReconnectTimer();
     if (socket) {
         //Avoid unintentionally reestablishing connection.
         socket.onclose = null;
@@ -186,6 +193,39 @@ function closeDialog(id) {
             parent.removeChild(dialog);
         }
     }
+}
+
+function setCookie(name, value, maxAgeSeconds) {
+    let cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Strict`;
+    if (maxAgeSeconds !== undefined) {
+        cookie += `; Max-Age=${maxAgeSeconds}`;
+    }
+    if (window.location.protocol === "https:") {
+        cookie += "; Secure";
+    }
+    document.cookie = cookie;
+}
+
+function persistClientIdFromCookie() {
+    const clientId = getCookie(clientIdCookieName);
+    if (clientId) {
+        localStorage.setItem(clientIdStorageKey, clientId);
+    }
+}
+
+function restoreClientIdCookieFromLocalStorage() {
+    const clientIdCookie = getCookie(clientIdCookieName);
+    if (clientIdCookie) {
+        localStorage.setItem(clientIdStorageKey, clientIdCookie);
+        return clientIdCookie;
+    }
+
+    const storedClientId = localStorage.getItem(clientIdStorageKey);
+    if (storedClientId) {
+        setCookie(clientIdCookieName, storedClientId, 365 * 24 * 60 * 60);
+    }
+
+    return storedClientId;
 }
 
 function getDisplayPlayerName(player) {
@@ -1670,7 +1710,7 @@ const handleReadyEvent = (ready) => {
         let selfPlayer;
         for (let i = 0; i < players.length; i++) {
             const player = players[i];
-            if (!player.connected || player.state === "spectating") {
+            if (player.state === "spectating") {
                 continue;
             }
 
@@ -1685,6 +1725,11 @@ const handleReadyEvent = (ready) => {
             if (player.rank <= 5) {
                 const newScoreboardEntry = document.createElement("div");
                 newScoreboardEntry.classList.add("gameover-scoreboard-entry");
+                if (!player.connected) {
+                    newScoreboardEntry.classList.add(
+                        "gameover-scoreboard-entry-disconnected",
+                    );
+                }
                 if (player.id === ownID) {
                     newScoreboardEntry.classList.add(
                         "gameover-scoreboard-entry-self",
@@ -1881,11 +1926,6 @@ function applyPlayers(players) {
             drawerName = getDisplayPlayerName(player);
         }
 
-        //We don't wanna show the disconnected players.
-        if (!player.connected) {
-            return;
-        }
-
         if (player.id === ownID) {
             setSpectateMode(
                 player.spectateToggleRequested,
@@ -1927,6 +1967,9 @@ function applyPlayers(players) {
         const playerDiv = document.createElement("div");
 
         playerDiv.classList.add("player");
+        if (!player.connected) {
+            playerDiv.classList.add("player-disconnected");
+        }
 
         const scoreAndStatusDiv = document.createElement("div");
         scoreAndStatusDiv.classList.add("score-and-status");
@@ -2456,40 +2499,90 @@ function isObject(obj) {
     );
 }
 
-const connectToWebsocket = () => {
-    if (socketIsConnecting === true) {
+function clearReconnectTimer() {
+    if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+}
+
+function scheduleReconnect(immediate) {
+    if (
+        socketIsConnecting ||
+        reconnectTimer !== null ||
+        (socket && socket.readyState === WebSocket.OPEN)
+    ) {
         return;
     }
 
+    showReconnectDialogIfNotShown();
+    restoreClientIdCookieFromLocalStorage();
+
+    const baseDelay = immediate ? 0 : Math.min(10000, 500 * 2 ** reconnectAttempts);
+    const jitter = immediate ? 0 : Math.floor(Math.random() * 250);
+    reconnectAttempts += 1;
+
+    reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectToWebsocket();
+    }, baseDelay + jitter);
+}
+
+const connectToWebsocket = () => {
+    if (
+        socketIsConnecting === true ||
+        (socket &&
+            (socket.readyState === WebSocket.OPEN ||
+                socket.readyState === WebSocket.CONNECTING))
+    ) {
+        return;
+    }
+
+    clearReconnectTimer();
+    restoreClientIdCookieFromLocalStorage();
     socketIsConnecting = true;
 
-    socket = new WebSocket(`${rootPath}/v1/lobby/ws`);
+    const nextSocket = new WebSocket(`${rootPath}/v1/lobby/ws`);
+    socket = nextSocket;
 
-    socket.onerror = (error) => {
+    nextSocket.onerror = (error) => {
+        if (socket !== nextSocket) {
+            return;
+        }
+
         //Is not connected and we haven't yet said that we are done trying to
         //connect, this means that we could never even establish a connection.
-        if (socket.readyState != 1 && !hasSocketEverConnected) {
+        if (nextSocket.readyState !== WebSocket.OPEN && !hasSocketEverConnected) {
             socketIsConnecting = false;
-            showTextDialog(
-                "connection-error-dialog",
-                '{{.Translation.Get "error-connecting"}}',
-                `{{.Translation.Get "error-connecting-text"}}`,
-            );
             console.log("Error establishing connection: ", error);
+            showReconnectDialogIfNotShown();
+            scheduleReconnect(false);
         } else {
             console.log("Socket error: ", error);
         }
     };
 
-    socket.onopen = () => {
+    nextSocket.onopen = () => {
+        if (socket !== nextSocket) {
+            return;
+        }
+
         closeDialog(reconnectDialogId);
+        persistClientIdFromCookie();
 
         hasSocketEverConnected = true;
         socketIsConnecting = false;
+        reconnectAttempts = 0;
+        clearReconnectTimer();
 
-        socket.onclose = (event) => {
+        nextSocket.onclose = (event) => {
+            if (socket !== nextSocket) {
+                return;
+            }
+
             //We want to avoid handling the error multiple times and showing the incorrect dialogs.
-            socket.onerror = null;
+            nextSocket.onerror = null;
+            socketIsConnecting = false;
 
             console.log("Socket Closed Connection: ", event);
 
@@ -2507,12 +2600,11 @@ const connectToWebsocket = () => {
                 );
             } else {
                 console.log("Attempting to reestablish socket connection.");
-                showReconnectDialogIfNotShown();
-                connectToWebsocket();
+                scheduleReconnect(false);
             }
         };
 
-        socket.onmessage = (jsonMessage) => {
+        nextSocket.onmessage = (jsonMessage) => {
             handleEvent(JSON.parse(jsonMessage.data));
         };
 
@@ -2528,7 +2620,11 @@ connectToWebsocket();
 //players could be killed and even cause the lobby being closed. Since
 //that's very frustrating, we want to avoid that.
 window.setInterval(() => {
-    if (socket) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "keep-alive" }));
     }
 }, 5000);
+
+window.addEventListener("online", () => {
+    scheduleReconnect(true);
+});

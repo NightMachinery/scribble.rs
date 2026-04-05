@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/lxzan/gws"
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/game"
@@ -156,4 +157,26 @@ func TestWebsocketReconnectReplacesPreviousConnectionAndPreservesScore(t *testin
 	require.Equal(t, 123, player.Score)
 	require.Len(t, ready.Players, 1)
 	require.Equal(t, 123, ready.Players[0].Score)
+}
+
+func TestGetPlayerFallsBackToClientID(t *testing.T) {
+	t.Parallel()
+
+	clientID := uuid.Must(uuid.NewV4())
+	player, lobby, err := game.CreateLobby("", "player", "english", &game.EditableLobbySettings{
+		Public:             false,
+		DrawingTime:        120,
+		Rounds:             4,
+		MaxPlayers:         8,
+		CustomWordsPerTurn: 3,
+		ClientsPerIPLimit:  1,
+		WordsPerTurn:       3,
+	}, nil, game.ChillScoring)
+	require.NoError(t, err)
+	player.SetClientID(clientID)
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/lobby/"+lobby.LobbyID, nil)
+	request.AddCookie(&http.Cookie{Name: "client-id", Value: clientID.String()})
+
+	require.Equal(t, player, GetPlayer(lobby, request))
 }

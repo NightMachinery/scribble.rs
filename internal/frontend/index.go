@@ -13,6 +13,7 @@ import (
 	"github.com/scribble-rs/scribble.rs/internal/api"
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/game"
+	"github.com/scribble-rs/scribble.rs/internal/identity"
 	"github.com/scribble-rs/scribble.rs/internal/state"
 	"github.com/scribble-rs/scribble.rs/internal/translations"
 	"github.com/scribble-rs/scribble.rs/internal/version"
@@ -329,6 +330,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	lobby.WritePreparedMessage = api.WritePreparedMessage
 	player.SetLastKnownAddress(api.GetIPAddressFromRequest(request))
 	api.SetGameplayCookies(writer, request, player, lobby)
+	if err := identity.SetName(player.GetClientID(), player.Name); err != nil {
+		log.Printf("error persisting player display name: %v", err)
+	}
 
 	// We only add the lobby if we could do all necessary pre-steps successfully.
 	state.AddLobby(lobby)

@@ -535,6 +535,10 @@ kbd {
     background-color: rgb(255, 224, 66);
 }
 
+.player-disconnected {
+    opacity: 0.6;
+}
+
 .rank {
     display: flex;
     grid-row-start: 1;
@@ -619,6 +623,10 @@ kbd {
 
 .gameover-scoreboard-entry:last-child {
     margin-bottom: 1rem;
+}
+
+.gameover-scoreboard-entry-disconnected {
+    opacity: 0.6;
 }
 
 .gameover-scoreboard-rank {

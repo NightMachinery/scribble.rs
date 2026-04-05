@@ -259,6 +259,7 @@ func (r *Ring[T]) Latest() T {
 type Player struct {
 	// userSession uniquely identifies the player.
 	userSession uuid.UUID
+	clientID    uuid.UUID
 	ws          *gws.Conn
 	// connectionVersion is incremented whenever a new websocket takes over
 	// this player session. This allows the server to ignore stale socket

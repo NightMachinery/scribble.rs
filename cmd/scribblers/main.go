@@ -16,6 +16,8 @@ import (
 	"github.com/scribble-rs/scribble.rs/internal/api"
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/frontend"
+	"github.com/scribble-rs/scribble.rs/internal/game"
+	"github.com/scribble-rs/scribble.rs/internal/identity"
 	"github.com/scribble-rs/scribble.rs/internal/state"
 	"github.com/scribble-rs/scribble.rs/internal/version"
 )
@@ -25,6 +27,12 @@ func main() {
 	if err != nil {
 		log.Fatalln("error loading configuration:", err)
 	}
+
+	if err := identity.Init(cfg.PlayerIdentityStorePath); err != nil {
+		log.Fatalln("error loading player identity store:", err)
+	}
+
+	game.SetDisconnectGrace(cfg.PlayerReconnectGrace)
 
 	log.Printf("Starting Scribble.rs version '%s'\n", version.Version)
 

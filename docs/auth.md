@@ -2,14 +2,18 @@
 
 ## Current auth model
 
-Scribble.rs does **not** have account login or durable user identities today.
+Scribble.rs does **not** have account login or full durable user identities.
 
-What it has instead is **session-based player identity**:
+What it has instead is **session-based player identity with browser fallback**:
 
 - each player gets a random `usersession` UUID
 - the official web client stores it in a `usersession` cookie
+- each browser also gets a stable `client-id` UUID
+- the official web client stores `client-id` in both a cookie and local storage
 - unofficial clients can also send it as the `Usersession` request header
+- unofficial clients can also send the browser identity as the `Client-Id` request header
 - the lobby context is usually carried by the `lobby-id` cookie
+- display names are durably persisted by `client-id`
 
 Relevant code:
 
@@ -21,7 +25,7 @@ Relevant code:
 
 There are a few separate checks in play:
 
-- **Player identity**: the `usersession` maps back to an existing in-memory `Player`
+- **Player identity**: the server first tries `usersession`, then falls back to `client-id`
 - **Lobby selection**: the server uses the path lobby ID or `lobby-id` cookie
 - **Lobby password**: optional join gate for private lobbies; this is **not** a user identity system
 - **Owner permissions**: lobby-owner actions are authorized by comparing the owner player's `usersession`
@@ -35,6 +39,7 @@ So the current system is better described as **cookie/header session identity + 
 `SetGameplayCookies` writes:
 
 - `usersession`
+- `client-id`
 - `lobby-id`
 
 with:
@@ -54,13 +59,13 @@ There is also a `discord-instance-id` cookie used for that integration path.
 
 ## Reconnection model
 
-Reconnects work by reusing the same `usersession` and finding the same in-memory `Player`.
+Reconnects work by reusing the same `usersession` or, if that is missing,
+falling back to the same `client-id` and finding the same in-memory `Player`.
 
 That means reconnect continuity only exists while all of the following remain true:
 
-- the browser still has the same `usersession`
+- the browser still has the same `usersession` or `client-id`
 - the lobby still exists in memory
-- the process has not restarted
 - the lobby has not been cleaned up for inactivity
 
 If any of those are no longer true, the client will not reconnect as the same player and may end up creating/joining as a different player identity.
@@ -69,7 +74,7 @@ If any of those are no longer true, the client will not reconnect as the same pl
 
 The websocket upgrade:
 
-1. reads `usersession`
+1. reads `usersession` / `client-id`
 2. resolves the target lobby
 3. finds the existing player for that session
 4. attaches the new websocket as the authoritative connection for that player
@@ -114,10 +119,9 @@ Because reconnects resolve back to the same player object, a refresh/reconnect p
 
 This is why score survives a normal refresh, but **does not** survive:
 
-- process restart
 - lobby cleanup/removal
-- losing the session cookie
-- reconnecting from a different browser profile without the same cookies
+- losing both the session cookie and the browser `client-id`
+- reconnecting from a different browser profile without the same browser identity
 
 ## Important non-goals of the current system
 

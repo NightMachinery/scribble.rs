@@ -71,11 +71,13 @@ type Config struct {
 	// LobbySettingDefaults is used for the server side rendering of the lobby
 	// creation page. It doesn't affect the default values of lobbies created
 	// via the API.
-	LobbySettingDefaults LobbySettingDefaults `envPrefix:"LOBBY_SETTING_DEFAULTS_"`
-	LobbySettingBounds   game.SettingBounds   `envPrefix:"LOBBY_SETTING_BOUNDS_"`
-	Port                 uint16               `env:"PORT"`
-	CORS                 CORS                 `envPrefix:"CORS_"`
-	LobbyCleanup         LobbyCleanup         `envPrefix:"LOBBY_CLEANUP_"`
+	LobbySettingDefaults    LobbySettingDefaults `envPrefix:"LOBBY_SETTING_DEFAULTS_"`
+	LobbySettingBounds      game.SettingBounds   `envPrefix:"LOBBY_SETTING_BOUNDS_"`
+	Port                    uint16               `env:"PORT"`
+	CORS                    CORS                 `envPrefix:"CORS_"`
+	LobbyCleanup            LobbyCleanup         `envPrefix:"LOBBY_CLEANUP_"`
+	PlayerReconnectGrace    time.Duration        `env:"PLAYER_RECONNECT_GRACE"`
+	PlayerIdentityStorePath string               `env:"PLAYER_IDENTITY_STORE_PATH"`
 }
 
 var Default = Config{
@@ -113,6 +115,8 @@ var Default = Config{
 		Interval:                  90 * time.Second,
 		PlayerInactivityThreshold: 75 * time.Second,
 	},
+	PlayerReconnectGrace:    30 * time.Second,
+	PlayerIdentityStorePath: "data/player-identities.json",
 }
 
 // Load loads the configuration from the environment. If a .env file is

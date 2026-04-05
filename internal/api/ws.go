@@ -31,15 +31,19 @@ func (handler *V1Handler) websocketUpgrade(writer http.ResponseWriter, request *
 	userSession, err := GetUserSession(request)
 	if err != nil {
 		log.Printf("error getting user session: %v", err)
-		http.Error(writer, "no valid usersession supplied", http.StatusBadRequest)
-		return
+		userSession = uuid.Nil
+	}
+	clientID, clientIDErr := GetClientID(request)
+	if clientIDErr != nil {
+		log.Printf("error getting client id: %v", clientIDErr)
+		clientID = uuid.Nil
 	}
 
-	if userSession == uuid.Nil {
+	if userSession == uuid.Nil && clientID == uuid.Nil {
 		// This issue can happen if you illegally request a websocket
-		// connection without ever having had a usersession or your
-		// client having deleted the usersession cookie.
-		http.Error(writer, "you don't have access to this lobby;usersession not set", http.StatusUnauthorized)
+		// connection without ever having had a usersession or client-id or your
+		// client having deleted the identity cookies.
+		http.Error(writer, "you don't have access to this lobby;player identity not set", http.StatusUnauthorized)
 		return
 	}
 
@@ -56,9 +60,9 @@ func (handler *V1Handler) websocketUpgrade(writer http.ResponseWriter, request *
 	}
 
 	lobby.Synchronized(func() {
-		player := lobby.GetPlayerBySession(userSession)
+		player := GetPlayer(lobby, request)
 		if player == nil {
-			http.Error(writer, "you don't have access to this lobby;usersession unknown", http.StatusUnauthorized)
+			http.Error(writer, "you don't have access to this lobby;player identity unknown", http.StatusUnauthorized)
 			return
 		}
 

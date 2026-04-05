@@ -156,6 +156,16 @@ func (player *Player) GetUserSession() uuid.UUID {
 	return player.userSession
 }
 
+// GetClientID returns the players stable browser identity.
+func (player *Player) GetClientID() uuid.UUID {
+	return player.clientID
+}
+
+// SetClientID sets the players stable browser identity.
+func (player *Player) SetClientID(clientID uuid.UUID) {
+	player.clientID = clientID
+}
+
 type PlayerState string
 
 const (
@@ -179,6 +189,16 @@ func (lobby *Lobby) GetPlayerByID(id uuid.UUID) *Player {
 func (lobby *Lobby) GetPlayerBySession(userSession uuid.UUID) *Player {
 	for _, player := range lobby.players {
 		if player.userSession == userSession {
+			return player
+		}
+	}
+
+	return nil
+}
+
+func (lobby *Lobby) GetPlayerByClientID(clientID uuid.UUID) *Player {
+	for _, player := range lobby.players {
+		if player.clientID == clientID {
 			return player
 		}
 	}

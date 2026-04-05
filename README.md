@@ -59,6 +59,8 @@ Available settings:
 | CORS_ALLOW_CREDENTIALS                    |                                                                  |         | False    |
 | LOBBY_CLEANUP_INTERVAL                    |                                                                  | 90s     | False    |
 | LOBBY_CLEANUP_PLAYER_INACTIVITY_THRESHOLD |                                                                  | 75s     | False    |
+| PLAYER_RECONNECT_GRACE                    | Grace period before disconnects end a turn early.                | 30s     | False    |
+| PLAYER_IDENTITY_STORE_PATH                | JSON file used to persist browser-ID to display-name mappings.   | data/player-identities.json | False |
 
 For more up-to-date configuration, read the
 [config.go](/internal/config/config.go) file.

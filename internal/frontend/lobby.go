@@ -1,16 +1,21 @@
 package frontend
 
 import (
+	json "encoding/json"
 	"log"
 	"net/http"
 	"strings"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/scribble-rs/scribble.rs/internal/api"
 	"github.com/scribble-rs/scribble.rs/internal/game"
+	"github.com/scribble-rs/scribble.rs/internal/identity"
 	"github.com/scribble-rs/scribble.rs/internal/state"
 	"github.com/scribble-rs/scribble.rs/internal/translations"
 	"golang.org/x/text/language"
 )
+
+const clientIDRestoreAttempted = "client_id_restore_attempted"
 
 type lobbyPageData struct {
 	*BasePageConfig
@@ -72,7 +77,13 @@ func (handler *SSRHandler) ssrEnterLobby(writer http.ResponseWriter, request *ht
 		return
 	}
 
-	if player := api.GetPlayer(lobby, request); player == nil && lobby.RequiresPassword() {
+	player := api.GetPlayer(lobby, request)
+	if player == nil && shouldAttemptClientIDRestore(request) {
+		renderClientIDRestorePage(writer, request)
+		return
+	}
+
+	if player == nil && lobby.RequiresPassword() {
 		if err := pageTemplates.ExecuteTemplate(writer, "lobby-password-page", &lobbyPasswordPageData{
 			BasePageConfig: handler.basePageConfig,
 			LobbyID:        lobby.LobbyID,
@@ -86,7 +97,7 @@ func (handler *SSRHandler) ssrEnterLobby(writer http.ResponseWriter, request *ht
 
 	handler.ssrEnterLobbyNoChecks(lobby, writer, request,
 		func() *game.Player {
-			return api.GetPlayer(lobby, request)
+			return player
 		})
 }
 
@@ -187,6 +198,9 @@ func (handler *SSRHandler) joinLobbyNoChecks(
 
 			newPlayer.SetLastKnownAddress(requestAddress)
 			api.SetGameplayCookies(writer, request, newPlayer, lobby)
+			if err := identity.SetName(newPlayer.GetClientID(), newPlayer.Name); err != nil {
+				log.Printf("error persisting player display name: %v", err)
+			}
 		} else {
 			player.SetLastKnownAddress(requestAddress)
 			api.SetGameplayCookies(writer, request, player, lobby)
@@ -224,4 +238,59 @@ func determineTranslation(r *http.Request) (*translations.Translation, string) {
 	}
 
 	return translations.DefaultTranslation, "en-us"
+}
+
+func shouldAttemptClientIDRestore(request *http.Request) bool {
+	if request.URL.Query().Get(clientIDRestoreAttempted) != "" {
+		return false
+	}
+
+	userSession, err := api.GetUserSession(request)
+	if err != nil {
+		userSession = uuid.Nil
+	}
+	if userSession != uuid.Nil {
+		return false
+	}
+
+	clientID, err := api.GetClientID(request)
+	if err != nil {
+		clientID = uuid.Nil
+	}
+
+	return clientID == uuid.Nil
+}
+
+func renderClientIDRestorePage(writer http.ResponseWriter, request *http.Request) {
+	currentURLBytes, _ := json.Marshal(request.URL.String())
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(http.StatusOK)
+	_, _ = writer.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Restoring session…</title>
+</head>
+<body>
+  <p>Restoring session…</p>
+  <script>
+    (() => {
+      const currentURL = new URL(` + string(currentURLBytes) + `, window.location.origin);
+      const storedClientID = localStorage.getItem("scribble.client-id");
+      if (storedClientID) {
+        let cookie = "client-id=" + encodeURIComponent(storedClientID) + "; path=/; SameSite=Strict; Max-Age=31536000";
+        if (window.location.protocol === "https:") {
+          cookie += "; Secure";
+        }
+        document.cookie = cookie;
+        currentURL.searchParams.delete("` + clientIDRestoreAttempted + `");
+      } else {
+        currentURL.searchParams.set("` + clientIDRestoreAttempted + `", "1");
+      }
+      window.location.replace(currentURL.toString());
+    })();
+  </script>
+</body>
+</html>`))
 }

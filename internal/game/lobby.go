@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lxzan/gws"
+	"github.com/scribble-rs/scribble.rs/internal/identity"
 	"github.com/scribble-rs/scribble.rs/internal/sanitize"
 
 	discordemojimap "github.com/Bios-Marcel/discordemojimap/v2"
@@ -48,6 +49,14 @@ const (
 	MinBrushSize           = 8
 	MaxBrushSize           = 32
 )
+
+var disconnectGrace = 8 * time.Second
+
+func SetDisconnectGrace(grace time.Duration) {
+	if grace > 0 {
+		disconnectGrace = grace
+	}
+}
 
 // SettingBounds defines the lower and upper bounds for the user-specified
 // lobby creation input.
@@ -771,6 +780,9 @@ func handleNameChangeEvent(caller *Player, lobby *Lobby, name string) {
 		caller.Name = newName
 		caller.AutoNamed = autoNamed
 		caller.NeedsName = false
+		if err := identity.SetName(caller.GetClientID(), newName); err != nil {
+			log.Printf("error persisting player display name: %v", err)
+		}
 		lobby.Broadcast(&Event{
 			Type: EventTypeNameChange,
 			Data: &NameChangeEvent{
@@ -1020,8 +1032,6 @@ func startTurnTimeTicker(lobby *Lobby, ticker *time.Ticker) {
 	}
 }
 
-const disconnectGrace = 8 * time.Second
-
 // tickLogic checks whether the lobby needs to proceed to the next round and
 // updates the available word hints if required. The return value indicates
 // whether additional ticks are necessary or not. The ticker is automatically
@@ -1176,7 +1186,7 @@ func recalculateRanks(lobby *Lobby) {
 	lastScore := math.MaxInt32
 	var lastRank int
 	for _, player := range sortedPlayers {
-		if !player.Connected && player.State != Spectating {
+		if player.State == Spectating {
 			continue
 		}
 

@@ -189,6 +189,29 @@ func Test_recalculateRanks(t *testing.T) {
 	}
 }
 
+func Test_recalculateRanksIncludesDisconnectedNonSpectators(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{}
+	lobby.players = append(lobby.players, &Player{
+		ID:        uuid.Must(uuid.NewV4()),
+		Score:     10,
+		Connected: true,
+		State:     Guessing,
+	})
+	lobby.players = append(lobby.players, &Player{
+		ID:        uuid.Must(uuid.NewV4()),
+		Score:     5,
+		Connected: false,
+		State:     Standby,
+	})
+
+	recalculateRanks(lobby)
+
+	require.Equal(t, 1, lobby.players[0].Rank)
+	require.Equal(t, 2, lobby.players[1].Rank)
+}
+
 func Test_chillScoring_calculateGuesserScore(t *testing.T) {
 	t.Parallel()
 

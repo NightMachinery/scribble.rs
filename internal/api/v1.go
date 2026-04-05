@@ -10,16 +10,20 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/scribble-rs/scribble.rs/internal/config"
 	"github.com/scribble-rs/scribble.rs/internal/game"
+	"github.com/scribble-rs/scribble.rs/internal/identity"
 	"github.com/scribble-rs/scribble.rs/internal/state"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
 
 var ErrLobbyNotExistent = errors.New("the requested lobby doesn't exist")
+
+const oneYearInSeconds = 365 * 24 * 60 * 60
 
 type V1Handler struct {
 	cfg *config.Config
@@ -221,6 +225,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	player.SetLastKnownAddress(GetIPAddressFromRequest(request))
 
 	SetGameplayCookies(writer, request, player, lobby)
+	if err := identity.SetName(player.GetClientID(), player.Name); err != nil {
+		log.Printf("error persisting player display name: %v", err)
+	}
 
 	lobbyData := CreateLobbyData(handler.cfg, lobby)
 
@@ -279,8 +286,12 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 
 			// Use the players generated usersession and pass it as a cookie.
 			SetGameplayCookies(writer, request, newPlayer, lobby)
+			if err := identity.SetName(newPlayer.GetClientID(), newPlayer.Name); err != nil {
+				log.Printf("error persisting player display name: %v", err)
+			}
 		} else {
 			player.SetLastKnownAddress(GetIPAddressFromRequest(request))
+			SetGameplayCookies(writer, request, player, lobby)
 		}
 
 		lobbyData = CreateLobbyData(handler.cfg, lobby)
@@ -332,6 +343,17 @@ func SetGameplayCookies(
 	player *game.Player,
 	lobby *game.Lobby,
 ) {
+	clientID := player.GetClientID()
+	if clientID == uuid.Nil {
+		requestClientID, err := GetClientID(request)
+		if err == nil && requestClientID != uuid.Nil {
+			clientID = requestClientID
+		} else {
+			clientID = uuid.Must(uuid.NewV4())
+		}
+		player.SetClientID(clientID)
+	}
+
 	discordInstanceId := GetDiscordInstanceId(request)
 	if discordInstanceId != "" {
 		http.SetCookie(w, &http.Cookie{
@@ -342,6 +364,17 @@ func SetGameplayCookies(
 			SameSite:    http.SameSiteNoneMode,
 			Partitioned: true,
 			Secure:      true,
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:        "client-id",
+			Value:       clientID.String(),
+			Domain:      discordDomain,
+			Path:        "/",
+			SameSite:    http.SameSiteNoneMode,
+			Partitioned: true,
+			Secure:      true,
+			MaxAge:      oneYearInSeconds,
+			Expires:     time.Now().Add(365 * 24 * time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:        "lobby-id",
@@ -360,6 +393,14 @@ func SetGameplayCookies(
 			Value:    player.GetUserSession().String(),
 			Path:     "/",
 			SameSite: http.SameSiteStrictMode,
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:     "client-id",
+			Value:    clientID.String(),
+			Path:     "/",
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   oneYearInSeconds,
+			Expires:  time.Now().Add(365 * 24 * time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:     "lobby-id",
@@ -593,20 +634,73 @@ func GetUserSession(request *http.Request) (uuid.UUID, error) {
 	return id, nil
 }
 
+// GetClientID accesses the stable browser identity from an HTTP request and
+// returns it. The identity can either be in the cookie or in the header.
+func GetClientID(request *http.Request) (uuid.UUID, error) {
+	var clientID string
+	if clientIDCookie, err := request.Cookie("client-id"); err == nil && clientIDCookie.Value != "" {
+		clientID = clientIDCookie.Value
+	} else {
+		clientID = request.Header.Get("Client-Id")
+	}
+
+	if clientID == "" {
+		return uuid.Nil, nil
+	}
+
+	id, err := uuid.FromString(clientID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("error parsing client id: %w", err)
+	}
+
+	return id, nil
+}
+
 // GetPlayer returns the player object that matches the usersession in the
 // supplied HTTP request and lobby. If no user session is set, we return nil.
 func GetPlayer(lobby *game.Lobby, request *http.Request) *game.Player {
 	userSession, err := GetUserSession(request)
 	if err != nil {
 		log.Printf("error getting user session: %v", err)
-		return nil
+		userSession = uuid.Nil
 	}
 
 	if userSession == uuid.Nil {
-		return nil
+		clientID, err := GetClientID(request)
+		if err != nil {
+			log.Printf("error getting client id: %v", err)
+			return nil
+		}
+
+		if clientID == uuid.Nil {
+			return nil
+		}
+
+		return lobby.GetPlayerByClientID(clientID)
 	}
 
-	return lobby.GetPlayerBySession(userSession)
+	player := lobby.GetPlayerBySession(userSession)
+	if player == nil {
+		clientID, err := GetClientID(request)
+		if err != nil {
+			log.Printf("error getting client id: %v", err)
+			return nil
+		}
+
+		if clientID == uuid.Nil {
+			return nil
+		}
+
+		player = lobby.GetPlayerByClientID(clientID)
+	}
+
+	if player != nil && player.GetClientID() == uuid.Nil {
+		if clientID, err := GetClientID(request); err == nil && clientID != uuid.Nil {
+			player.SetClientID(clientID)
+		}
+	}
+
+	return player
 }
 
 // GetPlayername either retrieves the playername from a cookie, the URL form.
@@ -616,6 +710,13 @@ func GetPlayername(request *http.Request) string {
 		username := request.Form.Get("username")
 		if username != "" {
 			return username
+		}
+	}
+
+	clientID, err := GetClientID(request)
+	if err == nil && clientID != uuid.Nil {
+		if name, ok := identity.GetName(clientID); ok && name != "" {
+			return name
 		}
 	}
 
