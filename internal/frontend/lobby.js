@@ -171,6 +171,14 @@ function showInfoDialog(title, message, buttonText) {
     );
 }
 
+function createOfflineBadge() {
+    const badge = document.createElement("span");
+    badge.classList.add("offline-badge");
+    badge.innerText = "OFFLINE";
+    badge.title = "Player disconnected";
+    return badge;
+}
+
 function createDialogButton(text) {
     const button = document.createElement("button");
     button.innerText = text;
@@ -1744,6 +1752,9 @@ const handleReadyEvent = (ready) => {
                 const scoreboardNameDiv = document.createElement("div");
                 scoreboardNameDiv.classList.add("gameover-scoreboard-name");
                 scoreboardNameDiv.innerText = getDisplayPlayerName(player);
+                if (!player.connected) {
+                    scoreboardNameDiv.appendChild(createOfflineBadge());
+                }
                 newScoreboardEntry.appendChild(scoreboardNameDiv);
 
                 const scoreboardScoreSpan = document.createElement("span");
@@ -2008,6 +2019,9 @@ function applyPlayers(players) {
         const playernameSpan = document.createElement("span");
         playernameSpan.classList.add("playername");
         playernameSpan.innerText = getDisplayPlayerName(player);
+        if (!player.connected) {
+            playernameSpan.appendChild(createOfflineBadge());
+        }
         playernameSpan.id = "playername-" + player.id;
         if (player.id === ownID) {
             playernameSpan.classList.add("playername-self");

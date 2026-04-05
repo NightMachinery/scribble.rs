@@ -521,6 +521,21 @@ kbd {
     flex: 1;
 }
 
+.offline-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background-color: rgb(105, 105, 105);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    vertical-align: middle;
+}
+
 .playername-self {
     font-weight: bold;
     cursor: pointer;
@@ -636,6 +651,10 @@ kbd {
 .gameover-scoreboard-name {
     flex: 1;
     text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
 }
 
 .gameover-scoreboard-score {
