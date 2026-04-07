@@ -1,0 +1,37 @@
+{{define "restore-session-page"}}
+<!DOCTYPE html>
+<html lang="{{.Locale}}">
+
+<head>
+    <title>Scribble.rs - Restoring Session</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {{template "non-static-css-decl" .}}
+    <link rel="stylesheet" type="text/css" href='{{.RootPath}}/resources/{{.WithCacheBust "root.css"}}' />
+    <link rel="stylesheet" type="text/css" href='{{.RootPath}}/resources/{{.WithCacheBust "error.css"}}' />
+    {{template "favicon-decl" .}}
+</head>
+
+<body {{if eq .Translation.IsRtl true}} dir="rtl" {{end}}>
+    <div id="app">
+        <div class="error-pane-wrapper">
+            <div class="error-pane" style="max-width: 32rem;">
+                <h1 class="error-title">↻</h1>
+                <h2 class="error-message">Restoring session…</h2>
+                <p style="font-size: 1.15rem; margin: 1rem 0;">
+                    Please wait while we restore your browser session.
+                </p>
+                <a class="go-back" style="font-size: 1.2rem;" href="{{.ContinueURL}}">
+                    Continue without session restore
+                </a>
+            </div>
+        </div>
+        <footer>
+            {{template "footer" .}}
+        </footer>
+    </div>
+    <script type="text/javascript" src='{{.RootPath}}/resources/{{.WithCacheBust "restore-session.js"}}'></script>
+</body>
+
+</html>
+{{end}}

@@ -1,7 +1,6 @@
 package frontend
 
 import (
-	json "encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -43,6 +42,15 @@ type lobbyJsData struct {
 	Locale      string
 }
 
+type restoreSessionPageData struct {
+	*BasePageConfig
+
+	ContinueURL string
+
+	Translation *translations.Translation
+	Locale      string
+}
+
 func (handler *SSRHandler) lobbyJs(writer http.ResponseWriter, request *http.Request) {
 	translation, locale := determineTranslation(request)
 	pageData := &lobbyJsData{
@@ -79,7 +87,7 @@ func (handler *SSRHandler) ssrEnterLobby(writer http.ResponseWriter, request *ht
 
 	player := api.GetPlayer(lobby, request)
 	if player == nil && shouldAttemptClientIDRestore(request) {
-		renderClientIDRestorePage(writer, request)
+		handler.renderClientIDRestorePage(writer, request, translation, locale)
 		return
 	}
 
@@ -261,36 +269,25 @@ func shouldAttemptClientIDRestore(request *http.Request) bool {
 	return clientID == uuid.Nil
 }
 
-func renderClientIDRestorePage(writer http.ResponseWriter, request *http.Request) {
-	currentURLBytes, _ := json.Marshal(request.URL.String())
+func (handler *SSRHandler) renderClientIDRestorePage(
+	writer http.ResponseWriter,
+	request *http.Request,
+	translation *translations.Translation,
+	locale string,
+) {
+	continueURL := *request.URL
+	queryValues := continueURL.Query()
+	queryValues.Set(clientIDRestoreAttempted, "1")
+	continueURL.RawQuery = queryValues.Encode()
+
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.WriteHeader(http.StatusOK)
-	_, _ = writer.Write([]byte(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Restoring session…</title>
-</head>
-<body>
-  <p>Restoring session…</p>
-  <script>
-    (() => {
-      const currentURL = new URL(` + string(currentURLBytes) + `, window.location.origin);
-      const storedClientID = localStorage.getItem("scribble.client-id");
-      if (storedClientID) {
-        let cookie = "client-id=" + encodeURIComponent(storedClientID) + "; path=/; SameSite=Strict; Max-Age=31536000";
-        if (window.location.protocol === "https:") {
-          cookie += "; Secure";
-        }
-        document.cookie = cookie;
-        currentURL.searchParams.delete("` + clientIDRestoreAttempted + `");
-      } else {
-        currentURL.searchParams.set("` + clientIDRestoreAttempted + `", "1");
-      }
-      window.location.replace(currentURL.toString());
-    })();
-  </script>
-</body>
-</html>`))
+	if err := pageTemplates.ExecuteTemplate(writer, "restore-session-page", &restoreSessionPageData{
+		BasePageConfig: handler.basePageConfig,
+		ContinueURL:    continueURL.String(),
+		Translation:    translation,
+		Locale:         locale,
+	}); err != nil {
+		log.Printf("Error templating restore session page: %s\n", err)
+	}
 }
