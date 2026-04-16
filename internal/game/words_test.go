@@ -419,3 +419,36 @@ func Test_CheckGuess_Positive(t *testing.T) {
 		})
 	}
 }
+
+func Test_ComputeEditDistance(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		a, b        string
+		maxDistance int
+		want        int
+	}{
+		{name: "exact", a: "painting", b: "painting", maxDistance: 0, want: 0},
+		{name: "one replacement", a: "painting", b: "paintxng", maxDistance: 1, want: 1},
+		{name: "adjacent transposition", a: "painting", b: "paitning", maxDistance: 1, want: 1},
+		{name: "two edits allowed", a: "painting", b: "paintxxg", maxDistance: 2, want: 2},
+		{name: "exceeds max distance", a: "painting", b: "pxxntxxg", maxDistance: 2, want: 3},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testCase.want, ComputeEditDistance(testCase.a, testCase.b, testCase.maxDistance))
+		})
+	}
+}
+
+func Test_allowedGuessDistance(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 0, allowedGuessDistance("painting", 0))
+	assert.Equal(t, 1, allowedGuessDistance("word", 25))
+	assert.Equal(t, 2, allowedGuessDistance("painting", 25))
+	assert.Equal(t, 1, allowedGuessDistance("abc", 25))
+}

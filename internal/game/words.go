@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand/v2"
 	"strings"
 	"unicode/utf8"
@@ -211,76 +212,105 @@ const (
 // to a distance of 2 and also handles transpositions where the runes are
 // directly next to eachother.
 func CheckGuess(a, b string) int {
-	// We only want to indicate a close guess if:
-	//   * 1 additional character is found (abc ~ abcd)
-	//   * 1 character is missing (abc ~ ab)
-	//   * 1 character is wrong (abc ~ adc)
-	//   * 2 characters are swapped (abc ~ acb)
-
-	// If the longer string can't be on both sides, the follow-up logic can
-	// be simpler, so we switch them here.
-	if len(a) < len(b) {
-		a, b = b, a
-	}
-
-	// A maximum of 4 bytes is used for one unicode code point. So if there is a definitive character
-	// count difference of 2 or more characters, we can clearly indicate a distant guess.\
-	// This prevents having to count all runes in b.
-	if len(a)-len(b) >= 8 {
-		return DistantGuess
-	}
-
-	if a == b {
+	distance := ComputeEditDistance(a, b, 1)
+	if distance == 0 {
 		return EqualGuess
 	}
-
-	var distance int
-	aBytes := []byte(a)
-	bBytes := []byte(b)
-	for {
-		aRune, aSize := utf8.DecodeRune(aBytes)
-		// If a eaches the end, then so does b, as we make sure a is longer at
-		// the top, therefore we can be sure no additional conflict diff occurs.
-		if aRune == utf8.RuneError {
-			// If a is longer in terms of bytes, but contains for example an emoji that takes up 4 bytes, this CAN happen.
-			distance += utf8.RuneCount(bBytes)
-			if distance >= 2 {
-				return DistantGuess
-			}
-			return distance
-		}
-		bRune, bSize := utf8.DecodeRune(bBytes)
-
-		// Either different runes, or b is empty, returning RuneError (65533).
-		if aRune != bRune {
-			// Check for transposition (abc ~ acb)
-			nextARune, nextASize := utf8.DecodeRune(aBytes[aSize:])
-			if nextARune == bRune {
-				if nextARune != utf8.RuneError {
-					nextBRune, nextBSize := utf8.DecodeRune(bBytes[bSize:])
-					if nextBRune == aRune {
-						distance++
-						aBytes = aBytes[aSize+nextASize:]
-						bBytes = bBytes[bSize+nextBSize:]
-						continue
-					}
-				}
-
-				// Make sure to not pop from b, so we can compare the rest, in
-				// case we are only missing one character for cases such as:
-				//   abc ~ bc
-				//   abcde ~ abde
-				bSize = 0
-			} else if distance == 1 {
-				// We'd reach a diff of 2 now. Needs to happen after transposition
-				// though, as transposition could still prove us wrong.
-				return DistantGuess
-			}
-
-			distance++
-		}
-
-		aBytes = aBytes[aSize:]
-		bBytes = bBytes[bSize:]
+	if distance == 1 {
+		return CloseGuess
 	}
+
+	return DistantGuess
+}
+
+func allowedGuessDistance(targetWord string, allowedEditDistancePercent int) int {
+	if allowedEditDistancePercent <= 0 {
+		return 0
+	}
+
+	targetLength := utf8.RuneCountInString(targetWord)
+	return int(math.Round(float64(targetLength) * float64(allowedEditDistancePercent) / 100.0))
+}
+
+// ComputeEditDistance returns the optimal string alignment distance between a
+// and b and treats adjacent transpositions as a single edit. If the edit
+// distance exceeds maxDistance, maxDistance+1 is returned early.
+func ComputeEditDistance(a, b string, maxDistance int) int {
+	if maxDistance < 0 {
+		maxDistance = 0
+	}
+
+	aRunes := []rune(a)
+	bRunes := []rune(b)
+
+	if abs(len(aRunes)-len(bRunes)) > maxDistance {
+		return maxDistance + 1
+	}
+
+	if len(aRunes) == 0 {
+		if len(bRunes) > maxDistance {
+			return maxDistance + 1
+		}
+		return len(bRunes)
+	}
+	if len(bRunes) == 0 {
+		if len(aRunes) > maxDistance {
+			return maxDistance + 1
+		}
+		return len(aRunes)
+	}
+
+	prevPrev := make([]int, len(bRunes)+1)
+	prev := make([]int, len(bRunes)+1)
+	curr := make([]int, len(bRunes)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+
+	for i := 1; i <= len(aRunes); i++ {
+		curr[0] = i
+		rowMin := curr[0]
+
+		for j := 1; j <= len(bRunes); j++ {
+			cost := 1
+			if aRunes[i-1] == bRunes[j-1] {
+				cost = 0
+			}
+
+			deletion := prev[j] + 1
+			insertion := curr[j-1] + 1
+			substitution := prev[j-1] + cost
+
+			value := min(deletion, min(insertion, substitution))
+
+			if i > 1 &&
+				j > 1 &&
+				aRunes[i-1] == bRunes[j-2] &&
+				aRunes[i-2] == bRunes[j-1] {
+				value = min(value, prevPrev[j-2]+1)
+			}
+
+			curr[j] = value
+			rowMin = min(rowMin, value)
+		}
+
+		if rowMin > maxDistance {
+			return maxDistance + 1
+		}
+
+		prevPrev, prev, curr = prev, curr, prevPrev
+	}
+
+	if prev[len(bRunes)] > maxDistance {
+		return maxDistance + 1
+	}
+
+	return prev[len(bRunes)]
+}
+
+func abs(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }

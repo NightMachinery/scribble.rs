@@ -15,18 +15,19 @@ import (
 )
 
 type LobbySettingDefaults struct {
-	Public             string `env:"PUBLIC"`
-	DrawingTime        string `env:"DRAWING_TIME"`
-	Rounds             string `env:"ROUNDS"`
-	MaxPlayers         string `env:"MAX_PLAYERS"`
-	CustomWords        string `env:"CUSTOM_WORDS"`
-	CustomWordsPerTurn string `env:"CUSTOM_WORDS_PER_TURN"`
-	ClientsPerIPLimit  string `env:"CLIENTS_PER_IP_LIMIT"`
-	Wordpack           string `env:"WORDPACK"`
-	ScoreCalculation   string `env:"SCORE_CALCULATION"`
-	WordsPerTurn       string `env:"WORDS_PER_TURN"`
-	Password           string `env:"PASSWORD"`
-	AssignRandomNames  string `env:"ASSIGN_RANDOM_NAMES"`
+	Public                     string `env:"PUBLIC"`
+	DrawingTime                string `env:"DRAWING_TIME"`
+	AllowedEditDistancePercent string `env:"ALLOWED_EDIT_DISTANCE_PERCENT"`
+	Rounds                     string `env:"ROUNDS"`
+	MaxPlayers                 string `env:"MAX_PLAYERS"`
+	CustomWords                string `env:"CUSTOM_WORDS"`
+	CustomWordsPerTurn         string `env:"CUSTOM_WORDS_PER_TURN"`
+	ClientsPerIPLimit          string `env:"CLIENTS_PER_IP_LIMIT"`
+	Wordpack                   string `env:"WORDPACK"`
+	ScoreCalculation           string `env:"SCORE_CALCULATION"`
+	WordsPerTurn               string `env:"WORDS_PER_TURN"`
+	Password                   string `env:"PASSWORD"`
+	AssignRandomNames          string `env:"ASSIGN_RANDOM_NAMES"`
 }
 
 type CORS struct {
@@ -83,29 +84,32 @@ type Config struct {
 var Default = Config{
 	Port: 8080,
 	LobbySettingDefaults: LobbySettingDefaults{
-		Public:             "false",
-		DrawingTime:        "200",
-		Rounds:             "4",
-		MaxPlayers:         "64",
-		CustomWordsPerTurn: "5",
-		ClientsPerIPLimit:  "5",
-		Wordpack:           "english",
-		ScoreCalculation:   "chill",
-		WordsPerTurn:       "5",
-		AssignRandomNames:  "true",
+		Public:                     "false",
+		DrawingTime:                "200",
+		AllowedEditDistancePercent: "25",
+		Rounds:                     "4",
+		MaxPlayers:                 "64",
+		CustomWordsPerTurn:         "5",
+		ClientsPerIPLimit:          "5",
+		Wordpack:                   "english",
+		ScoreCalculation:           "chill",
+		WordsPerTurn:               "5",
+		AssignRandomNames:          "true",
 	},
 	LobbySettingBounds: game.SettingBounds{
-		MinDrawingTime:        60,
-		MaxDrawingTime:        300,
-		MinRounds:             1,
-		MaxRounds:             20,
-		MinMaxPlayers:         2,
-		MaxMaxPlayers:         64,
-		MinClientsPerIPLimit:  1,
-		MaxClientsPerIPLimit:  24,
-		MinCustomWordsPerTurn: 1,
-		MaxWordsPerTurn:       6,
-		MinWordsPerTurn:       1,
+		MinDrawingTime:                60,
+		MaxDrawingTime:                300,
+		MinAllowedEditDistancePercent: 0,
+		MaxAllowedEditDistancePercent: 100,
+		MinRounds:                     1,
+		MaxRounds:                     20,
+		MinMaxPlayers:                 2,
+		MaxMaxPlayers:                 64,
+		MinClientsPerIPLimit:          1,
+		MaxClientsPerIPLimit:          24,
+		MinCustomWordsPerTurn:         1,
+		MaxWordsPerTurn:               6,
+		MinWordsPerTurn:               1,
 	},
 	CORS: CORS{
 		AllowedOrigins:   []string{"*"},

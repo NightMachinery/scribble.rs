@@ -61,15 +61,17 @@ func SetDisconnectGrace(grace time.Duration) {
 // SettingBounds defines the lower and upper bounds for the user-specified
 // lobby creation input.
 type SettingBounds struct {
-	MinDrawingTime        int `json:"minDrawingTime" env:"MIN_DRAWING_TIME"`
-	MaxDrawingTime        int `json:"maxDrawingTime" env:"MAX_DRAWING_TIME"`
-	MinRounds             int `json:"minRounds" env:"MIN_ROUNDS"`
-	MaxRounds             int `json:"maxRounds" env:"MAX_ROUNDS"`
-	MinMaxPlayers         int `json:"minMaxPlayers" env:"MIN_MAX_PLAYERS"`
-	MaxMaxPlayers         int `json:"maxMaxPlayers" env:"MAX_MAX_PLAYERS"`
-	MinClientsPerIPLimit  int `json:"minClientsPerIpLimit" env:"MIN_CLIENTS_PER_IP_LIMIT"`
-	MaxClientsPerIPLimit  int `json:"maxClientsPerIpLimit" env:"MAX_CLIENTS_PER_IP_LIMIT"`
-	MinCustomWordsPerTurn int `json:"minCustomWordsPerTurn" env:"MIN_CUSTOM_WORDS_PER_TURN"`
+	MinDrawingTime                int `json:"minDrawingTime" env:"MIN_DRAWING_TIME"`
+	MaxDrawingTime                int `json:"maxDrawingTime" env:"MAX_DRAWING_TIME"`
+	MinRounds                     int `json:"minRounds" env:"MIN_ROUNDS"`
+	MaxRounds                     int `json:"maxRounds" env:"MAX_ROUNDS"`
+	MinMaxPlayers                 int `json:"minMaxPlayers" env:"MIN_MAX_PLAYERS"`
+	MaxMaxPlayers                 int `json:"maxMaxPlayers" env:"MAX_MAX_PLAYERS"`
+	MinClientsPerIPLimit          int `json:"minClientsPerIpLimit" env:"MIN_CLIENTS_PER_IP_LIMIT"`
+	MaxClientsPerIPLimit          int `json:"maxClientsPerIpLimit" env:"MAX_CLIENTS_PER_IP_LIMIT"`
+	MinCustomWordsPerTurn         int `json:"minCustomWordsPerTurn" env:"MIN_CUSTOM_WORDS_PER_TURN"`
+	MinAllowedEditDistancePercent int `json:"minAllowedEditDistancePercent" env:"MIN_ALLOWED_EDIT_DISTANCE_PERCENT"`
+	MaxAllowedEditDistancePercent int `json:"maxAllowedEditDistancePercent" env:"MAX_ALLOWED_EDIT_DISTANCE_PERCENT"`
 	// MaxWordsPerTurn is now used for max words in general, as both amount of words and custom
 	// can be configured now.
 	MaxWordsPerTurn int `json:"maxWordsPerTurn" env:"MAX_WORDS_PER_TURN"`
@@ -276,7 +278,7 @@ func (lobby *Lobby) readyToStart() bool {
 	var hasConnectedPlayers bool
 
 	for _, otherPlayer := range lobby.players {
-		if !otherPlayer.Connected {
+		if !otherPlayer.Connected || otherPlayer.State == Spectating {
 			continue
 		}
 
@@ -355,9 +357,11 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 
 	normInput := sanitize.CleanText(lobby.lowercaser.String(trimmedMessage))
 	normSearched := sanitize.CleanText(lobby.CurrentWord)
+	allowedDistance := allowedGuessDistance(normSearched, lobby.AllowedEditDistancePercent)
+	distance := ComputeEditDistance(normInput, normSearched, max(allowedDistance, 1))
 
-	switch CheckGuess(normInput, normSearched) {
-	case EqualGuess:
+	switch {
+	case distance <= allowedDistance:
 		{
 			sender.LastScore = lobby.calculateGuesserScore()
 			sender.Score += sender.LastScore
@@ -375,7 +379,7 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 				lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
 			}
 		}
-	case CloseGuess:
+	case distance == 1:
 		{
 			// In cases of a close guess, we still send the message to everyone.
 			// This allows other players to guess the word by watching what the
@@ -1422,9 +1426,9 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 
 	// Reset from potentially ready to standby
 	if lobby.State != Ongoing {
-		// FIXME Should we not set spectators to standby? Currently there's no
-		// indication you are spectating right now.
-		player.State = Standby
+		if player.State != Spectating {
+			player.State = Standby
+		}
 		if lobby.readyToStart() {
 			lobby.startGame()
 			// Rank Calculation and sending out player updates happened anyway,
@@ -1447,7 +1451,7 @@ func (lobby *Lobby) GetAvailableWordHints(player *Player) []*WordHint {
 	// The draw simple gets every character as a word-hint. We basically abuse
 	// the hints for displaying the word, instead of having yet another GUI
 	// element that wastes space.
-	if player.State != Guessing {
+	if player.State == Drawing || player.State == Standby {
 		return lobby.wordHintsShown
 	}
 

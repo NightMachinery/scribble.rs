@@ -101,6 +101,8 @@ When a client joins or reconnects, the `ready` event includes `ready.wordHints` 
 - `Guessing` and `Spectating` -> masked hints
 - everyone else (`Drawing`, `Standby`) -> fully visible hints
 
+This means refreshing while spectating no longer reveals the full word or silently restores the player to active play.
+
 ### After a correct guess
 
 When a player guesses correctly, the server immediately sends that player `update-wordhint` with `lobby.wordHintsShown`, so they can see the full word.
@@ -209,6 +211,15 @@ Code path:
 It also transliterates some accented characters.
 
 That means the always-visible separators are only visual aids; players do not need to type them exactly for a guess to count.
+
+By default, a guess is accepted as correct when its edit distance is within
+`round(0.25 * len(normalizedTargetWord))`. This is a per-lobby setting:
+
+- `0` means exact match only
+- default is `25`
+- the length is counted after normalization
+
+Close-guess feedback is only shown when the guess is one edit away **and** not already accepted as correct by that setting.
 
 ## Relationship to scoring
 

@@ -11,6 +11,8 @@ import (
 	"github.com/lxzan/gws"
 	"github.com/scribble-rs/scribble.rs/internal/sanitize"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func createLobbyWithDemoPlayers(playercount int) *Lobby {
@@ -212,6 +214,56 @@ func Test_recalculateRanksIncludesDisconnectedNonSpectators(t *testing.T) {
 	require.Equal(t, 2, lobby.players[1].Rank)
 }
 
+func Test_readyToStartIgnoresSpectators(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{}
+	lobby.players = []*Player{
+		{Connected: true, State: Ready},
+		{Connected: true, State: Spectating},
+	}
+
+	require.True(t, lobby.readyToStart())
+}
+
+func Test_OnPlayerDisconnectPreservesSpectatorOutsideOngoing(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		State: Unstarted,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	spectator := lobby.JoinPlayer("spectator")
+	spectator.Connected = true
+	spectator.State = Spectating
+	spectator.SetWebsocket(&gws.Conn{})
+
+	lobby.OnPlayerDisconnect(spectator)
+
+	require.Equal(t, Spectating, spectator.State)
+	require.False(t, spectator.Connected)
+}
+
+func Test_GetAvailableWordHintsMasksSpectators(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		wordHints: []*WordHint{
+			{Character: 0, Underline: true},
+		},
+		wordHintsShown: []*WordHint{
+			{Character: 'a', Underline: true},
+		},
+	}
+
+	require.Equal(t, lobby.wordHints, lobby.GetAvailableWordHints(&Player{State: Guessing}))
+	require.Equal(t, lobby.wordHints, lobby.GetAvailableWordHints(&Player{State: Spectating}))
+	require.Equal(t, lobby.wordHintsShown, lobby.GetAvailableWordHints(&Player{State: Drawing}))
+	require.Equal(t, lobby.wordHintsShown, lobby.GetAvailableWordHints(&Player{State: Standby}))
+}
+
 func Test_chillScoring_calculateGuesserScore(t *testing.T) {
 	t.Parallel()
 
@@ -251,6 +303,66 @@ func Test_handleNameChangeEvent(t *testing.T) {
 	if player.Name != expectedName {
 		t.Errorf("playername didn't change; Expected %s, but was %s", expectedName, player.Name)
 	}
+}
+
+func Test_handleMessageAcceptsConfiguredEditDistance(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:                60,
+			AllowedEditDistancePercent: 25,
+		},
+		CurrentWord:      "abcd",
+		lowercaser:       cases.Lower(language.English),
+		ScoreCalculation: ChillScoring,
+		roundEndTime:     time.Now().Add(30 * time.Second).UnixMilli(),
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	sender := lobby.JoinPlayer("sender")
+	sender.Connected = true
+	sender.State = Guessing
+
+	other := lobby.JoinPlayer("other")
+	other.Connected = true
+	other.State = Guessing
+
+	handleMessage("abce", sender, lobby)
+
+	require.Equal(t, Standby, sender.State)
+	require.Positive(t, sender.Score)
+}
+
+func Test_handleMessageExactOnlyRejectsNearGuess(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:                60,
+			AllowedEditDistancePercent: 0,
+		},
+		CurrentWord:      "abcd",
+		lowercaser:       cases.Lower(language.English),
+		ScoreCalculation: ChillScoring,
+		roundEndTime:     time.Now().Add(30 * time.Second).UnixMilli(),
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	sender := lobby.JoinPlayer("sender")
+	sender.Connected = true
+	sender.State = Guessing
+
+	other := lobby.JoinPlayer("other")
+	other.Connected = true
+	other.State = Guessing
+
+	handleMessage("abce", sender, lobby)
+
+	require.Equal(t, Guessing, sender.State)
+	require.Zero(t, sender.Score)
 }
 
 func getUnexportedField(field reflect.Value) any {

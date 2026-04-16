@@ -111,6 +111,39 @@ func Test_parseDrawingTime(t *testing.T) {
 	}
 }
 
+func Test_parseAllowedEditDistancePercent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   string
+		want    int
+		wantErr bool
+	}{
+		{"empty value", "", 0, true},
+		{"space", " ", 0, true},
+		{"less than minimum", "-1", 0, true},
+		{"more than maximum", "101", 0, true},
+		{"minimum", "0", 0, false},
+		{"maximum", "100", 100, false},
+		{"something valid", "25", 25, false},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseAllowedEditDistancePercent(&config.Default, testCase.value)
+			if (err != nil) != testCase.wantErr {
+				t.Errorf("ParseAllowedEditDistancePercent() error = %v, wantErr %v", err, testCase.wantErr)
+				return
+			}
+			if got != testCase.want {
+				t.Errorf("ParseAllowedEditDistancePercent() = %v, want %v", got, testCase.want)
+			}
+		})
+	}
+}
+
 func Test_parseRounds(t *testing.T) {
 	t.Parallel()
 

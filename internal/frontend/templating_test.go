@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/scribble-rs/scribble.rs/internal/api"
@@ -58,6 +59,7 @@ func Test_templateIndexPage(t *testing.T) {
 	if err := pageTemplates.ExecuteTemplate(&buffer, "index", createPageData); err != nil {
 		t.Errorf("Error templating: %s", err)
 	}
+	require.True(t, strings.Contains(buffer.String(), "allowed_edit_distance_percent"))
 }
 
 func Test_templateLobbyPasswordPage(t *testing.T) {

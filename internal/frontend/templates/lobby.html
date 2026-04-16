@@ -121,7 +121,16 @@
                 </div>
             </div>
 
-            <div id="player-container"></div>
+            <div id="sidebar-player-sections">
+                <div class="player-section">
+                    <div class="player-section-title">{{.Translation.Get "players-title"}}</div>
+                    <div id="player-container"></div>
+                </div>
+                <div id="observer-section" class="player-section" style="display: none;">
+                    <div class="player-section-title">{{.Translation.Get "observers-title"}}</div>
+                    <div id="observer-container"></div>
+                </div>
+            </div>
 
             <div id="drawing-board-wrapper">
                 <div id="drawing-board-inner-wrapper">
@@ -203,6 +212,10 @@
                                     <input id="lobby-settings-drawing-time" class="input-item" type="number"
                                         name="drawing_time" min="{{.MinDrawingTime}}" max="{{.MaxDrawingTime}}"
                                         value="{{.DrawingTime}}" />
+                                    <b>{{.Translation.Get "allowed-edit-distance-percent-setting"}}</b>
+                                    <input id="lobby-settings-allowed-edit-distance-percent" class="input-item" type="number"
+                                        name="allowed_edit_distance_percent" min="{{.MinAllowedEditDistancePercent}}" max="{{.MaxAllowedEditDistancePercent}}"
+                                        value="{{.AllowedEditDistancePercent}}" />
                                     <b>{{.Translation.Get "rounds-setting"}}</b>
                                     <input id="lobby-settings-max-rounds" class="input-item" type="number" name="rounds"
                                         min="{{.MinRounds}}" max="{{.MaxRounds}}" value="{{.Rounds}}" />

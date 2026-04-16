@@ -39,13 +39,18 @@ Typical values:
 
 ### Guessers
 
-An active guesser gets points immediately after an exact correct guess in `handleMessage`:
+An active guesser gets points immediately after a correct guess in `handleMessage`:
 
 1. `LastScore` is set to the current guesser score.
 2. That value is added to the player's total `Score`.
 3. The player moves from `Guessing` to `Standby`.
 
-Close guesses do not award points.
+Depending on the lobby setting, "correct" can mean either:
+
+- an exact normalized match, or
+- a normalized guess whose edit distance is within the configured percentage of the target word length
+
+Close guesses that are still outside the allowed threshold do not award points.
 
 So for guessers, `LastScore` means "the points this player earned for this
 round's guess."

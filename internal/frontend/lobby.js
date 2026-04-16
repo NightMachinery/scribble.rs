@@ -46,6 +46,8 @@ window.onbeforeunload = () => {
 
 const messageInput = document.getElementById("message-input");
 const playerContainer = document.getElementById("player-container");
+const observerSection = document.getElementById("observer-section");
+const observerContainer = document.getElementById("observer-container");
 const wordContainer = document.getElementById("word-container");
 const chat = document.getElementById("chat");
 const messageContainer = document.getElementById("message-container");
@@ -73,12 +75,16 @@ const copyLobbyLinkMenuButton = document.getElementById(
 );
 const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
+const toggleSpectateButton = document.getElementById("toggle-spectate-button");
 const ownerForceEndGameButton = document.getElementById(
     "owner-force-end-game-button",
 );
 const lobbySettingsButton = document.getElementById("lobby-settings-button");
 const lobbySettingsDialog = document.getElementById("lobbysettings-dialog");
 const lobbySettingsPassword = document.getElementById("lobby-settings-password");
+const lobbySettingsAllowedEditDistancePercent = document.getElementById(
+    "lobby-settings-allowed-edit-distance-percent",
+);
 const lobbySettingsAssignRandomNames = document.getElementById(
     "lobby-settings-assign-random-names",
 );
@@ -624,6 +630,8 @@ function updateLobbyPasswordStatus(hasPassword) {
 function updateLobbySettingsForm(settings) {
     document.getElementById("lobby-settings-drawing-time").value =
         settings.drawingTime;
+    lobbySettingsAllowedEditDistancePercent.value =
+        settings.allowedEditDistancePercent;
     document.getElementById("lobby-settings-max-rounds").value =
         settings.rounds;
     document.getElementById("lobby-settings-public").checked = settings.public;
@@ -649,6 +657,8 @@ function saveLobbySettings() {
                 drawing_time: document.getElementById(
                     "lobby-settings-drawing-time",
                 ).value,
+                allowed_edit_distance_percent:
+                    lobbySettingsAllowedEditDistancePercent.value,
                 rounds: document.getElementById("lobby-settings-max-rounds")
                     .value,
                 public: document.getElementById("lobby-settings-public")
@@ -767,6 +777,7 @@ const fillBucket = 2;
 let allowDrawing = false;
 let spectating = false;
 let spectateRequested = false;
+updateSpectateButtonState();
 
 //Initially, we require some values to avoid running into nullpointers
 //or undefined errors. The specific values don't really matter.
@@ -1039,9 +1050,16 @@ function toggleSpectate() {
         }),
     );
 }
-document
-    .getElementById("toggle-spectate-button")
-    .addEventListener("click", toggleSpectate);
+toggleSpectateButton.addEventListener("click", toggleSpectate);
+
+function updateSpectateButtonState() {
+    toggleSpectateButton.classList.toggle("header-button-active", spectating);
+    toggleSpectateButton.classList.toggle(
+        "header-button-pending",
+        spectateRequested,
+    );
+    toggleSpectateButton.setAttribute("aria-pressed", spectating ? "true" : "false");
+}
 
 function setSpectateMode(requestedValue, spectatingValue) {
     const modeUnchanged = spectatingValue === spectating;
@@ -1050,13 +1068,18 @@ function setSpectateMode(requestedValue, spectatingValue) {
         return;
     }
 
-    if (spectateRequested && !requestedValue && modeUnchanged) {
+    if (!spectating && spectateRequested && !requestedValue && modeUnchanged) {
         showInfoDialog(
             `{{.Translation.Get "spectation-request-cancelled-title"}}`,
             `{{.Translation.Get "spectation-request-cancelled-text"}}`,
             `{{.Translation.Get "confirm"}}`,
         );
-    } else if (spectateRequested && !requestedValue && modeUnchanged) {
+    } else if (
+        spectating &&
+        spectateRequested &&
+        !requestedValue &&
+        modeUnchanged
+    ) {
         showInfoDialog(
             `{{.Translation.Get "participation-request-cancelled-title"}}`,
             `{{.Translation.Get "participation-request-cancelled-text"}}`,
@@ -1090,6 +1113,7 @@ function setSpectateMode(requestedValue, spectatingValue) {
 
     spectateRequested = requestedValue;
     spectating = spectatingValue;
+    updateSpectateButtonState();
 }
 
 function toggleReadiness() {
@@ -1577,6 +1601,9 @@ const handleEvent = (parsed) => {
                 '{{.Translation.Get "drawing-time-setting"}}: ' +
                 parsed.data.drawingTime +
                 "\n" +
+                '{{.Translation.Get "allowed-edit-distance-percent-setting"}}: ' +
+                parsed.data.allowedEditDistancePercent +
+                "\n" +
                 '{{.Translation.Get "rounds-setting"}}: ' +
                 parsed.data.rounds +
                 "\n" +
@@ -1766,7 +1793,10 @@ const handleReadyEvent = (ready) => {
             }
         }
 
-        if (selfPlayer.rank === 1) {
+        if (!selfPlayer || selfPlayer.state === "spectating") {
+            gameOverDialogTitle.innerText =
+                `{{.Translation.Get "game-over-lobby"}}`;
+        } else if (selfPlayer.rank === 1) {
             if (countOfRankOnePlayers >= 2) {
                 gameOverDialogTitle.innerText = `{{.Translation.Get "game-over-tie"}}`;
             } else {
@@ -1890,6 +1920,119 @@ function appendMessage(styleClass, author, message, attrs) {
 
 let cachedPlayers;
 
+function createObserverBadge() {
+    const observerBadge = document.createElement("span");
+    observerBadge.classList.add("player-observer-badge");
+    observerBadge.innerText = '{{.Translation.Get "observer-label"}}';
+    return observerBadge;
+}
+
+function createOwnerInlineActions(player, isObserver) {
+    if (ownerID !== ownID || player.id === ownID || !player.connected) {
+        return null;
+    }
+
+    const actions = document.createElement("div");
+    actions.classList.add("player-inline-actions");
+
+    const kickAction = document.createElement("button");
+    kickAction.classList.add("dialog-button", "player-inline-action");
+    kickAction.innerText = '{{.Translation.Get "kick-player"}}';
+    kickAction.onclick = () => onOwnerKickPlayer(player.id);
+    actions.appendChild(kickAction);
+
+    const modeAction = document.createElement("button");
+    modeAction.classList.add("dialog-button", "player-inline-action");
+    modeAction.innerText = isObserver
+        ? '{{.Translation.Get "force-player-participation"}}'
+        : '{{.Translation.Get "force-player-spectator"}}';
+    modeAction.onclick = () =>
+        isObserver
+            ? onOwnerForceParticipatePlayer(player.id)
+            : onOwnerForceSpectatePlayer(player.id);
+    actions.appendChild(modeAction);
+
+    return actions;
+}
+
+function createPlayerRow(player, matchOngoing, isObserver) {
+    const playerDiv = document.createElement("div");
+    playerDiv.classList.add("player");
+    if (isObserver) {
+        playerDiv.classList.add("player-observer");
+    }
+    if (!player.connected) {
+        playerDiv.classList.add("player-disconnected");
+    }
+
+    const scoreAndStatusDiv = document.createElement("div");
+    scoreAndStatusDiv.classList.add("score-and-status");
+    playerDiv.appendChild(scoreAndStatusDiv);
+
+    const playerscoreDiv = document.createElement("div");
+    playerscoreDiv.classList.add("playerscore-group");
+    scoreAndStatusDiv.appendChild(playerscoreDiv);
+
+    if (!isObserver && matchOngoing) {
+        if (player.state === "standby") {
+            playerDiv.classList.add("player-done");
+        } else if (player.state === "drawing") {
+            const playerStateImage = createPlayerStateImageNode(
+                `{{.RootPath}}/resources/{{.WithCacheBust "pencil.svg"}}`,
+            );
+            playerStateImage.style.transform = "scaleX(-1)";
+            scoreAndStatusDiv.appendChild(playerStateImage);
+        } else if (player.state === "standby") {
+            const playerStateImage = createPlayerStateImageNode(
+                `{{.RootPath}}/resources/{{.WithCacheBust "checkmark.svg"}}`,
+            );
+            scoreAndStatusDiv.appendChild(playerStateImage);
+        }
+    } else if (!isObserver && player.state === "ready") {
+        playerDiv.classList.add("player-ready");
+    }
+
+    if (isObserver) {
+        playerDiv.appendChild(createObserverBadge());
+    } else {
+        const rankSpan = document.createElement("span");
+        rankSpan.classList.add("rank");
+        rankSpan.innerText = player.rank;
+        playerDiv.appendChild(rankSpan);
+    }
+
+    const playernameSpan = document.createElement("span");
+    playernameSpan.classList.add("playername");
+    playernameSpan.innerText = getDisplayPlayerName(player);
+    if (!player.connected) {
+        playernameSpan.appendChild(createOfflineBadge());
+    }
+    playernameSpan.id = "playername-" + player.id;
+    if (player.id === ownID) {
+        playernameSpan.classList.add("playername-self");
+        playernameSpan.onclick = () => showNameChangeDialog(true);
+    }
+    playerDiv.appendChild(playernameSpan);
+
+    const playerscoreSpan = document.createElement("span");
+    playerscoreSpan.classList.add("playerscore");
+    playerscoreSpan.innerText = player.score;
+    playerscoreDiv.appendChild(playerscoreSpan);
+
+    const lastPlayerscoreSpan = document.createElement("span");
+    lastPlayerscoreSpan.classList.add("last-turn-score");
+    lastPlayerscoreSpan.innerText =
+        '{{.Translation.Get "last-turn"}}'.format(player.lastScore);
+    playerscoreDiv.appendChild(lastPlayerscoreSpan);
+
+    const inlineActions = createOwnerInlineActions(player, isObserver);
+    if (inlineActions) {
+        playerDiv.appendChild(inlineActions);
+    }
+
+    return playerDiv;
+}
+
 //applyPlayers takes the players passed, assigns them to cachedPlayers,
 //refreshes the scoreboard and updates the drawerID and drawerName variables.
 function applyPlayers(players) {
@@ -1928,6 +2071,8 @@ function applyPlayers(players) {
     }
 
     playerContainer.innerHTML = "";
+    observerContainer.innerHTML = "";
+    let observerCount = 0;
     players.forEach((player) => {
         // Makes sure that the "is choosing" a word dialog doesn't show
         // "undefined" as the player name. Can happen, if the player
@@ -1972,76 +2117,16 @@ function applyPlayers(players) {
         }
 
         if (player.state === "spectating") {
+            observerContainer.appendChild(
+                createPlayerRow(player, matchOngoing, true),
+            );
+            observerCount++;
             return;
         }
 
-        const playerDiv = document.createElement("div");
-
-        playerDiv.classList.add("player");
-        if (!player.connected) {
-            playerDiv.classList.add("player-disconnected");
-        }
-
-        const scoreAndStatusDiv = document.createElement("div");
-        scoreAndStatusDiv.classList.add("score-and-status");
-        playerDiv.appendChild(scoreAndStatusDiv);
-
-        const playerscoreDiv = document.createElement("div");
-        playerscoreDiv.classList.add("playerscore-group");
-        scoreAndStatusDiv.appendChild(playerscoreDiv);
-
-        if (matchOngoing) {
-            if (player.state === "standby") {
-                playerDiv.classList.add("player-done");
-            } else if (player.state === "drawing") {
-                const playerStateImage = createPlayerStateImageNode(
-                    `{{.RootPath}}/resources/{{.WithCacheBust "pencil.svg"}}`,
-                );
-                playerStateImage.style.transform = "scaleX(-1)";
-                scoreAndStatusDiv.appendChild(playerStateImage);
-            } else if (player.state === "standby") {
-                const playerStateImage = createPlayerStateImageNode(
-                    `{{.RootPath}}/resources/{{.WithCacheBust "checkmark.svg"}}`,
-                );
-                scoreAndStatusDiv.appendChild(playerStateImage);
-            }
-        } else {
-            if (player.state === "ready") {
-                playerDiv.classList.add("player-ready");
-            }
-        }
-
-        const rankSpan = document.createElement("span");
-        rankSpan.classList.add("rank");
-        rankSpan.innerText = player.rank;
-        playerDiv.appendChild(rankSpan);
-
-        const playernameSpan = document.createElement("span");
-        playernameSpan.classList.add("playername");
-        playernameSpan.innerText = getDisplayPlayerName(player);
-        if (!player.connected) {
-            playernameSpan.appendChild(createOfflineBadge());
-        }
-        playernameSpan.id = "playername-" + player.id;
-        if (player.id === ownID) {
-            playernameSpan.classList.add("playername-self");
-            playernameSpan.onclick = () => showNameChangeDialog(true);
-        }
-        playerDiv.appendChild(playernameSpan);
-
-        const playerscoreSpan = document.createElement("span");
-        playerscoreSpan.classList.add("playerscore");
-        playerscoreSpan.innerText = player.score;
-        playerscoreDiv.appendChild(playerscoreSpan);
-
-        const lastPlayerscoreSpan = document.createElement("span");
-        lastPlayerscoreSpan.classList.add("last-turn-score");
-        lastPlayerscoreSpan.innerText =
-            '{{.Translation.Get "last-turn"}}'.format(player.lastScore);
-        playerscoreDiv.appendChild(lastPlayerscoreSpan);
-
-        playerContainer.appendChild(playerDiv);
+        playerContainer.appendChild(createPlayerRow(player, matchOngoing, false));
     });
+    observerSection.style.display = observerCount > 0 ? "" : "none";
 
     // We do this at the end, so we can access the old values while
     // iterating over the new ones

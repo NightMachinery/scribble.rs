@@ -121,6 +121,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	requestedWordpack := request.Form.Get("wordpack")
 	wordpackData, wordpackKey, wordpackInvalid := ParseWordpack(requestedWordpack)
 	drawingTime, drawingTimeInvalid := ParseDrawingTime(handler.cfg, request.Form.Get("drawing_time"))
+	allowedEditDistancePercent, allowedEditDistancePercentInvalid := ParseAllowedEditDistancePercent(handler.cfg, request.Form.Get("allowed_edit_distance_percent"))
 	rounds, roundsInvalid := ParseRounds(handler.cfg, request.Form.Get("rounds"))
 	maxPlayers, maxPlayersInvalid := ParseMaxPlayers(handler.cfg, request.Form.Get("max_players"))
 	customWordsPerTurn, customWordsPerTurnInvalid := ParseCustomWordsPerTurn(handler.cfg, request.Form.Get("custom_words_per_turn"))
@@ -131,6 +132,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	assignRandomNames, assignRandomNamesInvalid := ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
 	if request.Form.Get("assign_random_names") == "" {
 		assignRandomNames = true
+	}
+	if request.Form.Get("allowed_edit_distance_percent") == "" {
+		allowedEditDistancePercent, allowedEditDistancePercentInvalid = ParseAllowedEditDistancePercent(handler.cfg, handler.cfg.LobbySettingDefaults.AllowedEditDistancePercent)
 	}
 
 	if wordsPerTurn < customWordsPerTurn {
@@ -156,6 +160,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	}
 	if drawingTimeInvalid != nil {
 		requestErrors = append(requestErrors, drawingTimeInvalid.Error())
+	}
+	if allowedEditDistancePercentInvalid != nil {
+		requestErrors = append(requestErrors, allowedEditDistancePercentInvalid.Error())
 	}
 	if roundsInvalid != nil {
 		requestErrors = append(requestErrors, roundsInvalid.Error())
@@ -192,14 +199,15 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 
 	playerName := GetPlayername(request)
 	lobbySettings := &game.EditableLobbySettings{
-		Rounds:             rounds,
-		DrawingTime:        drawingTime,
-		MaxPlayers:         maxPlayers,
-		CustomWordsPerTurn: customWordsPerTurn,
-		ClientsPerIPLimit:  clientsPerIPLimit,
-		Public:             publicLobby,
-		WordsPerTurn:       wordsPerTurn,
-		AssignRandomNames:  assignRandomNames,
+		Rounds:                     rounds,
+		DrawingTime:                drawingTime,
+		AllowedEditDistancePercent: allowedEditDistancePercent,
+		MaxPlayers:                 maxPlayers,
+		CustomWordsPerTurn:         customWordsPerTurn,
+		ClientsPerIPLimit:          clientsPerIPLimit,
+		Public:                     publicLobby,
+		WordsPerTurn:               wordsPerTurn,
+		AssignRandomNames:          assignRandomNames,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName,
 		wordpackKey, lobbySettings, customWords, scoreCalculation)
@@ -451,6 +459,11 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	// Editable properties
 	maxPlayers, maxPlayersInvalid := ParseMaxPlayers(handler.cfg, request.Form.Get("max_players"))
 	drawingTime, drawingTimeInvalid := ParseDrawingTime(handler.cfg, request.Form.Get("drawing_time"))
+	allowedEditDistancePercent := lobby.AllowedEditDistancePercent
+	var allowedEditDistancePercentInvalid error
+	if rawAllowedEditDistancePercent := request.Form.Get("allowed_edit_distance_percent"); rawAllowedEditDistancePercent != "" {
+		allowedEditDistancePercent, allowedEditDistancePercentInvalid = ParseAllowedEditDistancePercent(handler.cfg, rawAllowedEditDistancePercent)
+	}
 	rounds, roundsInvalid := ParseRounds(handler.cfg, request.Form.Get("rounds"))
 	customWordsPerTurn, customWordsPerTurnInvalid := ParseCustomWordsPerTurn(handler.cfg, request.Form.Get("custom_words_per_turn"))
 	clientsPerIPLimit, clientsPerIPLimitInvalid := ParseClientsPerIPLimit(handler.cfg, request.Form.Get("clients_per_ip_limit"))
@@ -475,6 +488,9 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	}
 	if drawingTimeInvalid != nil {
 		requestErrors = append(requestErrors, drawingTimeInvalid.Error())
+	}
+	if allowedEditDistancePercentInvalid != nil {
+		requestErrors = append(requestErrors, allowedEditDistancePercentInvalid.Error())
 	}
 	if roundsInvalid != nil {
 		requestErrors = append(requestErrors, roundsInvalid.Error())
@@ -527,6 +543,7 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 		lobby.Public = publicLobby
 		lobby.Rounds = rounds
 		lobby.WordsPerTurn = wordsPerTurn
+		lobby.AllowedEditDistancePercent = allowedEditDistancePercent
 		lobby.AssignRandomNames = assignRandomNames
 
 		if lobby.State == game.Ongoing {

@@ -327,6 +327,10 @@ type EditableLobbySettings struct {
 	// DrawingTime is the amount of seconds that each player has available to
 	// finish their drawing.
 	DrawingTime int `json:"drawingTime"`
+	// AllowedEditDistancePercent controls how many edits are still accepted as
+	// correct guesses, relative to the normalized target word length. A value
+	// of 0 means guesses must match exactly.
+	AllowedEditDistancePercent int `json:"allowedEditDistancePercent"`
 	// WordsPerTurn defines how many words the drawer is able to choose from
 	WordsPerTurn int `json:"wordsPerTurn"`
 	// AssignRandomNames controls whether players without a provided name get a generated random name.

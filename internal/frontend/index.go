@@ -191,6 +191,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	requestedWordpack := request.Form.Get("wordpack")
 	wordpackData, wordpackKey, wordpackInvalid := api.ParseWordpack(requestedWordpack)
 	drawingTime, drawingTimeInvalid := api.ParseDrawingTime(handler.cfg, request.Form.Get("drawing_time"))
+	allowedEditDistancePercent, allowedEditDistancePercentInvalid := api.ParseAllowedEditDistancePercent(handler.cfg, request.Form.Get("allowed_edit_distance_percent"))
 	rounds, roundsInvalid := api.ParseRounds(handler.cfg, request.Form.Get("rounds"))
 	maxPlayers, maxPlayersInvalid := api.ParseMaxPlayers(handler.cfg, request.Form.Get("max_players"))
 	customWordsPerTurn, customWordsPerTurnInvalid := api.ParseCustomWordsPerTurn(handler.cfg, request.Form.Get("custom_words_per_turn"))
@@ -201,6 +202,10 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	assignRandomNames, assignRandomNamesInvalid := api.ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
 	if request.Form.Get("assign_random_names") == "" {
 		assignRandomNames = true
+	}
+	if request.Form.Get("allowed_edit_distance_percent") == "" {
+		allowedEditDistancePercent, allowedEditDistancePercentInvalid = api.ParseAllowedEditDistancePercent(handler.cfg, handler.cfg.LobbySettingDefaults.AllowedEditDistancePercent)
+		request.Form.Set("allowed_edit_distance_percent", handler.cfg.LobbySettingDefaults.AllowedEditDistancePercent)
 	}
 
 	if wordsPerTurn < customWordsPerTurn {
@@ -221,18 +226,19 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		BasePageConfig: handler.basePageConfig,
 		SettingBounds:  handler.cfg.LobbySettingBounds,
 		LobbySettingDefaults: config.LobbySettingDefaults{
-			Public:             request.Form.Get("public"),
-			DrawingTime:        request.Form.Get("drawing_time"),
-			Rounds:             request.Form.Get("rounds"),
-			MaxPlayers:         request.Form.Get("max_players"),
-			CustomWords:        request.Form.Get("custom_words"),
-			CustomWordsPerTurn: request.Form.Get("custom_words_per_turn"),
-			ClientsPerIPLimit:  request.Form.Get("clients_per_ip_limit"),
-			Wordpack:           requestedWordpack,
-			ScoreCalculation:   request.Form.Get("score_calculation"),
-			WordsPerTurn:       request.Form.Get("words_per_turn"),
-			Password:           request.Form.Get("password"),
-			AssignRandomNames:  request.Form.Get("assign_random_names"),
+			Public:                     request.Form.Get("public"),
+			DrawingTime:                request.Form.Get("drawing_time"),
+			AllowedEditDistancePercent: request.Form.Get("allowed_edit_distance_percent"),
+			Rounds:                     request.Form.Get("rounds"),
+			MaxPlayers:                 request.Form.Get("max_players"),
+			CustomWords:                request.Form.Get("custom_words"),
+			CustomWordsPerTurn:         request.Form.Get("custom_words_per_turn"),
+			ClientsPerIPLimit:          request.Form.Get("clients_per_ip_limit"),
+			Wordpack:                   requestedWordpack,
+			ScoreCalculation:           request.Form.Get("score_calculation"),
+			WordsPerTurn:               request.Form.Get("words_per_turn"),
+			Password:                   request.Form.Get("password"),
+			AssignRandomNames:          request.Form.Get("assign_random_names"),
 		},
 		Wordpack:          requestedWordpack,
 		Wordpacks:         game.SupportedWordpacks,
@@ -250,6 +256,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	}
 	if drawingTimeInvalid != nil {
 		pageData.Errors = append(pageData.Errors, drawingTimeInvalid.Error())
+	}
+	if allowedEditDistancePercentInvalid != nil {
+		pageData.Errors = append(pageData.Errors, allowedEditDistancePercentInvalid.Error())
 	}
 	if roundsInvalid != nil {
 		pageData.Errors = append(pageData.Errors, roundsInvalid.Error())
@@ -303,14 +312,15 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	}
 
 	lobbySettings := &game.EditableLobbySettings{
-		Rounds:             rounds,
-		DrawingTime:        drawingTime,
-		MaxPlayers:         maxPlayers,
-		CustomWordsPerTurn: customWordsPerTurn,
-		ClientsPerIPLimit:  clientsPerIPLimit,
-		Public:             publicLobby,
-		WordsPerTurn:       wordsPerTurn,
-		AssignRandomNames:  assignRandomNames,
+		Rounds:                     rounds,
+		DrawingTime:                drawingTime,
+		AllowedEditDistancePercent: allowedEditDistancePercent,
+		MaxPlayers:                 maxPlayers,
+		CustomWordsPerTurn:         customWordsPerTurn,
+		ClientsPerIPLimit:          clientsPerIPLimit,
+		Public:                     publicLobby,
+		WordsPerTurn:               wordsPerTurn,
+		AssignRandomNames:          assignRandomNames,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName, wordpackKey,
 		lobbySettings, customWords, scoreCalculation)

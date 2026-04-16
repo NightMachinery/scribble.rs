@@ -83,6 +83,15 @@
                                     min="{{.MinDrawingTime}}" max="{{.MaxDrawingTime}}" value="{{.DrawingTime}}">
                                 <button class="number-increment" type="button">+</button>
                             </div>
+                            <label class="lobby-create-label" for="allowed_edit_distance_percent">
+                                {{.Translation.Get "allowed-edit-distance-percent-setting"}}
+                            </label>
+                            <div class="number-input">
+                                <button class="number-decrement" type="button">-</button>
+                                <input size="4" type="number" name="allowed_edit_distance_percent" id="allowed_edit_distance_percent"
+                                    min="{{.MinAllowedEditDistancePercent}}" max="{{.MaxAllowedEditDistancePercent}}" value="{{.AllowedEditDistancePercent}}">
+                                <button class="number-increment" type="button">+</button>
+                            </div>
                             <label class="lobby-create-label" for="rounds">
                                 {{.Translation.Get "rounds-setting"}}
                             </label>

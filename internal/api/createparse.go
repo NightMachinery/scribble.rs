@@ -66,6 +66,11 @@ func ParseDrawingTime(cfg *config.Config, value string) (int, error) {
 		cfg.LobbySettingBounds.MaxDrawingTime, "drawing time")
 }
 
+func ParseAllowedEditDistancePercent(cfg *config.Config, value string) (int, error) {
+	return parseIntValue(value, cfg.LobbySettingBounds.MinAllowedEditDistancePercent,
+		cfg.LobbySettingBounds.MaxAllowedEditDistancePercent, "allowed edit distance percent")
+}
+
 // ParseRounds checks whether the given value is an integer between
 // the lower and upper bound of rounds played. All other invalid
 // input, including empty strings, will return an error.
