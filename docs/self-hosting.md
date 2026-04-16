@@ -10,7 +10,7 @@ The `self_host.zsh` helper below builds the current local checkout, updates `~/C
 
 ## What it does
 
-- public URL: defaults to `http://m2.pinky.lilf.ir`
+- public URL: defaults to `http://scribble.pinky.lilf.ir`
 - internal bind: `127.0.0.1:38180`
 - process manager: `tmux`
 - reverse proxy: `Caddy`
@@ -24,7 +24,7 @@ Port `3000` is intentionally not used.
 - `git`
 - `tmux`
 - `caddy`
-- Go 1.25 support (`go` may auto-download the Go 1.25 toolchain on first build)
+- Go 1.25.x support (`go` may auto-download the required Go 1.25 toolchain on first build)
 - a running Caddy instance that can be reloaded with:
 
 ```zsh
@@ -55,6 +55,10 @@ From the repo root:
 ### `redeploy [url]`
 
 Same as `setup`, but meant for rebuilding and restarting after local edits.
+
+If a previous Go toolchain download was interrupted and left behind an incomplete
+`golang.org/toolchain` cache entry, the script now clears that broken cache
+folder before rebuilding so `go build` can reinstall the right toolchain.
 
 ### `start`
 

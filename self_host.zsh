@@ -171,18 +171,59 @@ load_state() {
   ROOT_PATH_WITH_SLASH="$ROOT_PATH_WITH_SLASH"
 }
 
+go_mod_version() {
+  sed -nE 's/^go[[:space:]]+([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/p' "$REPO_ROOT/go.mod" | head -n 1
+}
+
+required_go_family() {
+  local version="${1:-}"
+  if [[ "$version" == *.*.* ]]; then
+    print -r -- "${version%.*}"
+  else
+    print -r -- "$version"
+  fi
+}
+
+toolchain_cache_dir() {
+  local version="$1"
+  local gomodcache goos goarch
+  gomodcache="$(GOTOOLCHAIN=local go env GOMODCACHE 2>/dev/null || true)"
+  goos="$(GOTOOLCHAIN=local go env GOOS 2>/dev/null || true)"
+  goarch="$(GOTOOLCHAIN=local go env GOARCH 2>/dev/null || true)"
+
+  [[ -n "$version" && -n "$gomodcache" && -n "$goos" && -n "$goarch" ]] || return 0
+  print -r -- "$gomodcache/golang.org/toolchain@v0.0.1-go${version}.${goos}-${goarch}"
+}
+
+repair_incomplete_go_toolchain() {
+  local required_version toolchain_dir
+  required_version="$(go_mod_version)"
+  toolchain_dir="$(toolchain_cache_dir "$required_version")"
+
+  [[ -n "$toolchain_dir" && -d "$toolchain_dir" ]] || return 0
+  [[ -x "$toolchain_dir/bin/go" ]] && return 0
+
+  note "Found incomplete cached Go toolchain for go$required_version; clearing it so Go can reinstall it."
+  chmod -R u+w "$toolchain_dir" 2>/dev/null || true
+  rm -rf "$toolchain_dir"
+}
+
 build_binary() {
   ensure_runtime_dirs
   load_proxy_env
 
-  local version ldflags local_go_version
+  local version ldflags local_go_version required_version required_family
   version="$(git -C "$REPO_ROOT" describe --tags --dirty --always 2>/dev/null || print dev)"
   ldflags="-w -s -X github.com/scribble-rs/scribble.rs/internal/version.Version=$version"
   local_go_version="$(GOTOOLCHAIN=local go env GOVERSION 2>/dev/null || true)"
+  required_version="$(go_mod_version)"
+  required_family="$(required_go_family "$required_version")"
 
-  if [[ -n "$local_go_version" && "$local_go_version" != go1.25* ]]; then
-    note "Local Go is $local_go_version; the first build may download Go 1.25 automatically."
+  if [[ -n "$local_go_version" && -n "$required_family" && "$local_go_version" != go${required_family}* ]]; then
+    note "Local Go is $local_go_version; the first build may download Go $required_version automatically."
   fi
+
+  repair_incomplete_go_toolchain
 
   note "Building Scribble.rs ($version)"
   (
