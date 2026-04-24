@@ -39,8 +39,27 @@ USAGE
 }
 
 tmuxnew () {
-	tmux kill-session -t "$1" &> /dev/null || true
-	tmux new -d -s "$@"
+  local session="$1"
+  shift
+
+  tmux kill-session -t "$session" &>/dev/null || true
+  tmux new-session -d -s "$session" "$@"
+}
+
+tmuxnew_with_env() {
+  local session="$1"
+  shift
+  local command="$1"
+  shift
+  local -a tmux_args=(-d -s "$session")
+  local env_assignment
+
+  for env_assignment in "$@"; do
+    tmux_args+=(-e "$env_assignment")
+  done
+
+  tmux kill-session -t "$session" &>/dev/null || true
+  tmux new-session "${tmux_args[@]}" "$command"
 }
 
 die() {
@@ -321,9 +340,15 @@ start_app() {
   [[ -f "$ENV_PATH" ]] || die "Missing $ENV_PATH. Run ./self_host.zsh setup first."
 
   note "Starting app in tmux session $SESSION_NAME"
-  local launch_cmd
-  launch_cmd="cd ${(q)REPO_ROOT} && load_proxy_env() { export ALL_PROXY=http://127.0.0.1:2097 all_proxy=http://127.0.0.1:2097 http_proxy=http://127.0.0.1:2097 https_proxy=http://127.0.0.1:2097 HTTP_PROXY=http://127.0.0.1:2097 HTTPS_PROXY=http://127.0.0.1:2097 npm_config_proxy=http://127.0.0.1:2097 npm_config_https_proxy=http://127.0.0.1:2097; } && load_proxy_env && set -a && source ${(q)ENV_PATH} && set +a && exec ${(q)BIN_PATH} >> ${(q)LOG_PATH} 2>&1"
-  tmuxnew "$SESSION_NAME" zsh -lc "$launch_cmd"
+  tmuxnew_with_env "$SESSION_NAME" "zsh -lc 'cd ${(q)REPO_ROOT} && set -a && source ${(q)ENV_PATH} && set +a && exec ${(q)BIN_PATH} >> ${(q)LOG_PATH} 2>&1'" \
+    "ALL_PROXY=http://127.0.0.1:2097" \
+    "all_proxy=http://127.0.0.1:2097" \
+    "http_proxy=http://127.0.0.1:2097" \
+    "https_proxy=http://127.0.0.1:2097" \
+    "HTTP_PROXY=http://127.0.0.1:2097" \
+    "HTTPS_PROXY=http://127.0.0.1:2097" \
+    "npm_config_proxy=http://127.0.0.1:2097" \
+    "npm_config_https_proxy=http://127.0.0.1:2097"
 }
 
 stop_app() {

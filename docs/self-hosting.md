@@ -125,6 +125,8 @@ The script exports the proxy environment requested for build/runtime commands:
 export ALL_PROXY=http://127.0.0.1:2097 all_proxy=http://127.0.0.1:2097 http_proxy=http://127.0.0.1:2097 https_proxy=http://127.0.0.1:2097 HTTP_PROXY=http://127.0.0.1:2097 HTTPS_PROXY=http://127.0.0.1:2097 npm_config_proxy=http://127.0.0.1:2097 npm_config_https_proxy=http://127.0.0.1:2097
 ```
 
+The tmux-managed runtime session now receives those proxy values as literal environment entries instead of rebuilding them inside the shell command string.
+
 Node is not needed for this deployment path because the client assets are already embedded in the Go server. If you later add a Node-based build step in zsh, load Node with:
 
 ```zsh
