@@ -97,6 +97,18 @@ So a guesser's score is:
 - plus a time bonus that declines as the round goes on
 - plus a hint bonus that shrinks as hints are revealed
 
+### What happens if drawing time changes mid-turn?
+
+Changing `drawingTime` while a word is already active updates the current round immediately:
+
+- the server recomputes the round end timestamp from the original round start plus the new duration
+- already-awarded correct guesses are rescored against the new duration
+- each guess keeps the actual `hintsLeft` value it had when that player guessed
+- if the shorter timer means more hints should already be visible now, the server reveals them immediately
+- if the new end time is already in the past, the round ends right away
+
+Already revealed hints are **not** hidden again when the timer is increased.
+
 ## Scoring modes
 
 ### `chill`

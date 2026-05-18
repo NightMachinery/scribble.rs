@@ -85,7 +85,7 @@ var Default = Config{
 	Port: 8080,
 	LobbySettingDefaults: LobbySettingDefaults{
 		Public:                     "false",
-		DrawingTime:                "200",
+		DrawingTime:                "120",
 		AllowedEditDistancePercent: "25",
 		Rounds:                     "4",
 		MaxPlayers:                 "64",
@@ -94,7 +94,7 @@ var Default = Config{
 		Wordpack:                   "english",
 		ScoreCalculation:           "chill",
 		WordsPerTurn:               "5",
-		AssignRandomNames:          "true",
+		AssignRandomNames:          "false",
 	},
 	LobbySettingBounds: game.SettingBounds{
 		MinDrawingTime:                60,

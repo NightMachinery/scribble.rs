@@ -131,7 +131,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
 	assignRandomNames, assignRandomNamesInvalid := ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
 	if request.Form.Get("assign_random_names") == "" {
-		assignRandomNames = true
+		assignRandomNames = false
 	}
 	if request.Form.Get("allowed_edit_distance_percent") == "" {
 		allowedEditDistancePercent, allowedEditDistancePercentInvalid = ParseAllowedEditDistancePercent(handler.cfg, handler.cfg.LobbySettingDefaults.AllowedEditDistancePercent)
@@ -545,12 +545,7 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 		lobby.WordsPerTurn = wordsPerTurn
 		lobby.AllowedEditDistancePercent = allowedEditDistancePercent
 		lobby.AssignRandomNames = assignRandomNames
-
-		if lobby.State == game.Ongoing {
-			lobby.DrawingTimeNew = drawingTime
-		} else {
-			lobby.DrawingTime = drawingTime
-		}
+		lobby.ApplyDrawingTime(drawingTime)
 		if clearPassword {
 			lobby.ClearJoinPassword()
 		} else if lobbyPassword != "" {

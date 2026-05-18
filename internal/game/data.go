@@ -35,11 +35,6 @@ type Lobby struct {
 
 	EditableLobbySettings
 
-	// DrawingTimeNew is the new value of the drawing time. If a round is
-	// already ongoing, we can't simply change the drawing time, as it would
-	// screw with the score calculation of the current turn.
-	DrawingTimeNew int
-
 	CustomWords      []string
 	words            []string
 	joinPasswordHash [sha256.Size]byte
@@ -77,6 +72,7 @@ type Lobby struct {
 	Wordpack   string
 	// roundEndTime represents the time at which the current round will end.
 	// This is a UTC unix-timestamp in milliseconds.
+	roundStartTime int64
 	roundEndTime   int64
 	roundEndReason roundEndReason
 

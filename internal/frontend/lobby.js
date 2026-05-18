@@ -403,7 +403,7 @@ function showKickDialog() {
 
         cachedPlayers.forEach((player) => {
             //Don't wanna allow kicking ourselves.
-            if (player.id !== ownID && player.connected) {
+            if (player.id !== ownID) {
                 if (isOwner) {
                     const playerRow = document.createElement("div");
                     playerRow.classList.add("kick-player-row");
@@ -1591,6 +1591,7 @@ const handleEvent = (parsed) => {
         );
     } else if (parsed.type === "lobby-settings-changed") {
         rounds = parsed.data.rounds;
+        drawingTimeSetting = parsed.data.drawingTime;
         updateRoundsDisplay();
         updateLobbySettingsForm(parsed.data);
         updateButtonVisibilities();
@@ -1630,6 +1631,8 @@ const handleEvent = (parsed) => {
                     ? '{{.Translation.Get "lobby-password-set"}}'
                     : '{{.Translation.Get "lobby-password-not-set"}}'),
         );
+    } else if (parsed.type === "round-time-updated") {
+        setRoundTimeLeft(parsed.data.timeLeft);
     } else if (parsed.type === "shutdown") {
         socket.onclose = null;
         socket.close();
@@ -1756,41 +1759,38 @@ const handleReadyEvent = (ready) => {
                 selfPlayer = player;
             }
 
-            // We only display the first 5 players on the scoreboard.
-            if (player.rank <= 5) {
-                const newScoreboardEntry = document.createElement("div");
-                newScoreboardEntry.classList.add("gameover-scoreboard-entry");
-                if (!player.connected) {
-                    newScoreboardEntry.classList.add(
-                        "gameover-scoreboard-entry-disconnected",
-                    );
-                }
-                if (player.id === ownID) {
-                    newScoreboardEntry.classList.add(
-                        "gameover-scoreboard-entry-self",
-                    );
-                }
-
-                const scoreboardRankDiv = document.createElement("div");
-                scoreboardRankDiv.classList.add("gameover-scoreboard-rank");
-                scoreboardRankDiv.innerText = player.rank;
-                newScoreboardEntry.appendChild(scoreboardRankDiv);
-
-                const scoreboardNameDiv = document.createElement("div");
-                scoreboardNameDiv.classList.add("gameover-scoreboard-name");
-                scoreboardNameDiv.innerText = getDisplayPlayerName(player);
-                if (!player.connected) {
-                    scoreboardNameDiv.appendChild(createOfflineBadge());
-                }
-                newScoreboardEntry.appendChild(scoreboardNameDiv);
-
-                const scoreboardScoreSpan = document.createElement("span");
-                scoreboardScoreSpan.classList.add("gameover-scoreboard-score");
-                scoreboardScoreSpan.innerText = player.score;
-                newScoreboardEntry.appendChild(scoreboardScoreSpan);
-
-                gameOverScoreboard.appendChild(newScoreboardEntry);
+            const newScoreboardEntry = document.createElement("div");
+            newScoreboardEntry.classList.add("gameover-scoreboard-entry");
+            if (!player.connected) {
+                newScoreboardEntry.classList.add(
+                    "gameover-scoreboard-entry-disconnected",
+                );
             }
+            if (player.id === ownID) {
+                newScoreboardEntry.classList.add(
+                    "gameover-scoreboard-entry-self",
+                );
+            }
+
+            const scoreboardRankDiv = document.createElement("div");
+            scoreboardRankDiv.classList.add("gameover-scoreboard-rank");
+            scoreboardRankDiv.innerText = player.rank;
+            newScoreboardEntry.appendChild(scoreboardRankDiv);
+
+            const scoreboardNameDiv = document.createElement("div");
+            scoreboardNameDiv.classList.add("gameover-scoreboard-name");
+            scoreboardNameDiv.innerText = getDisplayPlayerName(player);
+            if (!player.connected) {
+                scoreboardNameDiv.appendChild(createOfflineBadge());
+            }
+            newScoreboardEntry.appendChild(scoreboardNameDiv);
+
+            const scoreboardScoreSpan = document.createElement("span");
+            scoreboardScoreSpan.classList.add("gameover-scoreboard-score");
+            scoreboardScoreSpan.innerText = player.score;
+            newScoreboardEntry.appendChild(scoreboardScoreSpan);
+
+            gameOverScoreboard.appendChild(newScoreboardEntry);
         }
 
         if (!selfPlayer || selfPlayer.state === "spectating") {
@@ -1928,7 +1928,7 @@ function createObserverBadge() {
 }
 
 function createOwnerInlineActions(player, isObserver) {
-    if (ownerID !== ownID || player.id === ownID || !player.connected) {
+    if (ownerID !== ownID || player.id === ownID) {
         return null;
     }
 

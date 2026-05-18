@@ -363,7 +363,13 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 	switch {
 	case distance <= allowedDistance:
 		{
-			sender.LastScore = lobby.calculateGuesserScore()
+			guessTime := getTimeAsMillis()
+			score := lobby.calculateGuesserScoreAt(guessTime, lobby.hintsLeft)
+			sender.LastScore = score
+			sender.currentRoundGuessTime = guessTime
+			sender.currentRoundHintsLeft = lobby.hintsLeft
+			sender.currentRoundGuessScore = score
+			sender.currentRoundGuessed = true
 			sender.Score += sender.LastScore
 
 			sender.State = Standby
@@ -820,11 +826,152 @@ func isAlwaysVisibleHintCharacter(char rune) bool {
 }
 
 func (lobby *Lobby) calculateGuesserScore() int {
-	return lobby.ScoreCalculation.CalculateGuesserScore(lobby)
+	return lobby.calculateGuesserScoreAt(getTimeAsMillis(), lobby.hintsLeft)
+}
+
+func (lobby *Lobby) calculateGuesserScoreAt(guessTimeMillis int64, hintsLeft int) int {
+	return lobby.ScoreCalculation.CalculateGuesserScoreAtTime(
+		lobby.hintCount,
+		hintsLeft,
+		lobby.DrawingTime,
+		guessTimeMillis,
+		lobby.roundEndTime,
+	)
 }
 
 func (lobby *Lobby) calculateDrawerScore() int {
 	return lobby.ScoreCalculation.CalculateDrawerScore(lobby)
+}
+
+func resetCurrentRoundGuessData(player *Player) {
+	player.currentRoundGuessTime = 0
+	player.currentRoundHintsLeft = 0
+	player.currentRoundGuessScore = 0
+	player.currentRoundGuessed = false
+}
+
+func (lobby *Lobby) broadcastRoundTimeUpdated() {
+	lobby.Broadcast(&Event{
+		Type: EventTypeRoundTimeUpdated,
+		Data: &RoundTimeUpdated{
+			TimeLeft: int(max(0, lobby.roundEndTime-getTimeAsMillis())),
+		},
+	})
+}
+
+func (lobby *Lobby) countRevealedHints() int {
+	var revealedHints int
+	for _, hint := range lobby.wordHints {
+		if hint.Revealed {
+			revealedHints++
+		}
+	}
+
+	return revealedHints
+}
+
+func (lobby *Lobby) revealRandomHint() bool {
+	if lobby.wordHints == nil {
+		return false
+	}
+
+	for {
+		randomIndex := rand.Int() % len(lobby.wordHints)
+		if lobby.wordHints[randomIndex].Character == 0 {
+			lobby.wordHints[randomIndex].Character = []rune(lobby.CurrentWord)[randomIndex]
+			lobby.wordHints[randomIndex].Revealed = true
+			lobby.wordHintsShown[randomIndex].Revealed = true
+			return true
+		}
+	}
+}
+
+func (lobby *Lobby) broadcastWordHints() {
+	wordHintData := &Event{
+		Type: EventTypeUpdateWordHint,
+		Data: lobby.wordHints,
+	}
+	lobby.broadcastConditional(wordHintData, IsAllowedToSeeHints)
+
+	wordHintsShownData := &Event{
+		Type: EventTypeUpdateWordHint,
+		Data: lobby.wordHintsShown,
+	}
+	lobby.broadcastConditional(wordHintsShownData, IsAllowedToSeeRevealedHints)
+}
+
+func (lobby *Lobby) revealOverdueHints(currentTime int64) bool {
+	if lobby.wordHints == nil || lobby.hintCount == 0 || lobby.roundStartTime == 0 {
+		return false
+	}
+
+	revealHintEveryXMilliseconds := int64(lobby.DrawingTime * 1000 / (lobby.hintCount + 1))
+	if revealHintEveryXMilliseconds <= 0 {
+		return false
+	}
+
+	elapsed := max(0, currentTime-lobby.roundStartTime)
+	desiredRevealedHints := min(lobby.hintCount, int(elapsed/revealHintEveryXMilliseconds))
+	revealedHints := lobby.countRevealedHints()
+	if desiredRevealedHints <= revealedHints {
+		lobby.hintsLeft = max(0, lobby.hintCount-revealedHints)
+		return false
+	}
+
+	for revealedHints < desiredRevealedHints {
+		if !lobby.revealRandomHint() {
+			break
+		}
+		revealedHints++
+	}
+	lobby.hintsLeft = max(0, lobby.hintCount-revealedHints)
+	return true
+}
+
+func (lobby *Lobby) recalculateCurrentRoundGuesses() {
+	for _, player := range lobby.players {
+		if !player.currentRoundGuessed {
+			continue
+		}
+
+		newScore := lobby.calculateGuesserScoreAt(
+			player.currentRoundGuessTime,
+			player.currentRoundHintsLeft,
+		)
+		player.Score += newScore - player.currentRoundGuessScore
+
+		if player.LastScore == player.currentRoundGuessScore {
+			player.LastScore = newScore
+		}
+
+		player.currentRoundGuessScore = newScore
+	}
+}
+
+func (lobby *Lobby) ApplyDrawingTime(drawingTime int) {
+	lobby.DrawingTime = drawingTime
+
+	if lobby.State != Ongoing || lobby.CurrentWord == "" || lobby.roundStartTime == 0 {
+		return
+	}
+
+	lobby.roundEndTime = lobby.roundStartTime + int64(lobby.DrawingTime)*1000
+	lobby.recalculateCurrentRoundGuesses()
+	recalculateRanks(lobby)
+
+	currentTime := getTimeAsMillis()
+	if currentTime >= lobby.roundEndTime {
+		advanceLobby(lobby)
+		return
+	}
+
+	wordHintsChanged := lobby.revealOverdueHints(currentTime)
+	if wordHintsChanged {
+		lobby.broadcastWordHints()
+	}
+
+	lobby.broadcastRoundTimeUpdated()
+	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
 }
 
 // advanceLobbyPredefineDrawer is required in cases where the drawer is removed
@@ -850,12 +997,12 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 	previousWord := lobby.CurrentWord
 	lobby.CurrentWord = ""
 	lobby.wordHints = nil
-
-	if lobby.DrawingTimeNew != 0 {
-		lobby.DrawingTime = lobby.DrawingTimeNew
-	}
+	lobby.wordHintsShown = nil
+	lobby.roundStartTime = 0
 
 	for _, otherPlayer := range lobby.players {
+		resetCurrentRoundGuessData(otherPlayer)
+
 		// If the round ends and people are still guessing, that means the
 		// "LastScore" value for the next turn has to be "no score earned".
 		// We also reset spectating players, to prevent any score fuckups.
@@ -936,10 +1083,12 @@ func endCurrentGame(lobby *Lobby, previousWord string) {
 	lobby.wordHints = nil
 	lobby.wordHintsShown = nil
 	lobby.CurrentWord = ""
+	lobby.roundStartTime = 0
 	lobby.roundEndTime = 0
 
 	for _, player := range lobby.players {
 		player.SpectateToggleRequested = false
+		resetCurrentRoundGuessData(player)
 		if player.State != Spectating {
 			player.State = Standby
 		}
@@ -1088,30 +1237,8 @@ func (lobby *Lobby) tickLogic(expectedTicker *time.Ticker) bool {
 		timeLeft := lobby.roundEndTime - currentTime
 		if timeLeft <= revealHintAtXOrLower {
 			lobby.hintsLeft--
-
-			// We are trying til we find a yet unshown wordhint. Since we have
-			// thread safety and have already checked that there's a hint
-			// left, this loop can never spin forever.
-			for {
-				randomIndex := rand.Int() % len(lobby.wordHints)
-				if lobby.wordHints[randomIndex].Character == 0 {
-					lobby.wordHints[randomIndex].Character = []rune(lobby.CurrentWord)[randomIndex]
-					lobby.wordHints[randomIndex].Revealed = true
-					lobby.wordHintsShown[randomIndex].Revealed = true
-					wordHintData := &Event{
-						Type: EventTypeUpdateWordHint,
-						Data: lobby.wordHints,
-					}
-					lobby.broadcastConditional(wordHintData, IsAllowedToSeeHints)
-
-					wordHintsShownData := &Event{
-						Type: EventTypeUpdateWordHint,
-						Data: lobby.wordHintsShown,
-					}
-					lobby.broadcastConditional(wordHintsShownData, IsAllowedToSeeRevealedHints)
-					break
-				}
-			}
+			lobby.revealRandomHint()
+			lobby.broadcastWordHints()
 		}
 	}
 
@@ -1217,7 +1344,8 @@ func (lobby *Lobby) selectWord(index int) error {
 			index, len(lobby.wordChoice))
 	}
 
-	lobby.roundEndTime = getTimeAsMillis() + int64(lobby.DrawingTime)*1000
+	lobby.roundStartTime = getTimeAsMillis()
+	lobby.roundEndTime = lobby.roundStartTime + int64(lobby.DrawingTime)*1000
 	lobby.CurrentWord = lobby.wordChoice[index]
 	lobby.wordChoice = nil
 
@@ -1503,6 +1631,7 @@ func (lobby *Lobby) Shutdown() {
 type ScoreCalculation interface {
 	Identifier() string
 	CalculateGuesserScore(lobby *Lobby) int
+	CalculateGuesserScoreAtTime(hintCount, hintsLeft, drawingTime int, guessTimeMillis, roundEndTimeMillis int64) int
 	CalculateDrawerScore(lobby *Lobby) int
 }
 
@@ -1546,7 +1675,24 @@ func (s *adjustableScoringAlgorithm) CalculateGuesserScoreInternal(
 	hintCount, hintsLeft, drawingTime int,
 	roundEndTimeMillis int64,
 ) int {
-	secondsLeft := int(roundEndTimeMillis/1000 - time.Now().UTC().Unix())
+	return s.CalculateGuesserScoreAtTime(
+		hintCount,
+		hintsLeft,
+		drawingTime,
+		time.Now().UTC().UnixMilli(),
+		roundEndTimeMillis,
+	)
+}
+
+func (s *adjustableScoringAlgorithm) CalculateGuesserScoreAtTime(
+	hintCount, hintsLeft, drawingTime int,
+	guessTimeMillis, roundEndTimeMillis int64,
+) int {
+	if guessTimeMillis >= roundEndTimeMillis {
+		return 0
+	}
+
+	secondsLeft := int(roundEndTimeMillis/1000 - guessTimeMillis/1000)
 
 	declineFactor := s.bonusBaseScoreDeclineFactor / float64(drawingTime)
 	score := int(

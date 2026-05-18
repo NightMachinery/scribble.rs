@@ -62,6 +62,17 @@ func Test_templateIndexPage(t *testing.T) {
 	require.True(t, strings.Contains(buffer.String(), "allowed_edit_distance_percent"))
 }
 
+func Test_createDefaultIndexPageDataUsesUpdatedLobbyDefaults(t *testing.T) {
+	t.Parallel()
+
+	handler, err := NewHandler(&config.Default)
+	require.NoError(t, err)
+
+	pageData := handler.createDefaultIndexPageData()
+	require.Equal(t, "120", pageData.DrawingTime)
+	require.Equal(t, "false", pageData.AssignRandomNames)
+}
+
 func Test_templateLobbyPasswordPage(t *testing.T) {
 	t.Parallel()
 

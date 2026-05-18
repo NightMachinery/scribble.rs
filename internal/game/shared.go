@@ -42,6 +42,7 @@ const (
 	EventTypeDrawerKicked             = "drawer-kicked"
 	EventTypeOwnerChange              = "owner-change"
 	EventTypeLobbySettingsChanged     = "lobby-settings-changed"
+	EventTypeRoundTimeUpdated         = "round-time-updated"
 	EventTypeShutdown                 = "shutdown"
 	EventTypeKeepAlive                = "keep-alive"
 )
@@ -172,6 +173,10 @@ type WordChosen struct {
 	Hints    []*WordHint `json:"hints"`
 }
 
+type RoundTimeUpdated struct {
+	TimeLeft int `json:"timeLeft"`
+}
+
 type YourTurn struct {
 	TimeLeft        int      `json:"timeLeft"`
 	PreSelectedWord int      `json:"preSelectedWord"`
@@ -273,6 +278,12 @@ type Player struct {
 	lastKnownAddress string
 	// messageTimestamps are stored for ratelimiting reasons. See handleMessage.
 	messageTimestamps *Ring[time.Time]
+	// currentRoundGuess* keep enough state to recompute current-turn score
+	// contributions if the lobby drawing time changes mid-turn.
+	currentRoundGuessTime  int64
+	currentRoundHintsLeft  int
+	currentRoundGuessScore int
+	currentRoundGuessed    bool
 
 	// Name is the players displayed name
 	Name  string      `json:"name"`

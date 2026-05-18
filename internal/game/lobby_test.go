@@ -954,3 +954,183 @@ func Test_handleNameChangeEventRejectsBlankNameWhenRandomNamesDisabled(t *testin
 	require.Equal(t, "Kevin", player.Name)
 	require.False(t, player.NeedsName)
 }
+
+func Test_handleOwnerKickEventAllowsDisconnectedTarget(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = false
+
+	handleOwnerKickEvent(lobby, owner, target.ID)
+
+	require.Len(t, lobby.players, 1)
+	require.Equal(t, owner, lobby.players[0])
+}
+
+func Test_handleOwnerForceSpectateEventAllowsDisconnectedTarget(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+		State: Unstarted,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = false
+	target.State = Standby
+
+	handleOwnerForceSpectateEvent(lobby, owner, target.ID)
+
+	require.Equal(t, Spectating, target.State)
+}
+
+func Test_handleKickVoteEventAllowsDisconnectedTarget(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	owner := lobby.JoinPlayer("owner")
+	owner.Connected = true
+	lobby.OwnerID = owner.ID
+
+	voter := lobby.JoinPlayer("voter")
+	voter.Connected = true
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = false
+
+	handleKickVoteEvent(lobby, owner, target.ID)
+	require.Len(t, lobby.players, 3)
+
+	handleKickVoteEvent(lobby, voter, target.ID)
+	require.Len(t, lobby.players, 2)
+	require.Nil(t, lobby.GetPlayerByID(target.ID))
+}
+
+func TestApplyDrawingTimeUpdatesCurrentTurnScoresAndHints(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().UnixMilli()
+	roundStart := now - 30_000
+	oldRoundEnd := roundStart + 120_000
+	guessTime := roundStart + 20_000
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       120,
+			AssignRandomNames: true,
+		},
+		State:            Ongoing,
+		ScoreCalculation: ChillScoring,
+		CurrentWord:      "apple",
+		hintCount:        2,
+		hintsLeft:        2,
+		roundStartTime:   roundStart,
+		roundEndTime:     oldRoundEnd,
+		wordHints: []*WordHint{
+			{Underline: true},
+			{Underline: true},
+			{Underline: true},
+			{Underline: true},
+			{Underline: true},
+		},
+		wordHintsShown: []*WordHint{
+			{Character: 'a'},
+			{Character: 'p'},
+			{Character: 'p'},
+			{Character: 'l'},
+			{Character: 'e'},
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	drawer := lobby.JoinPlayer("drawer")
+	drawer.Connected = true
+	drawer.State = Drawing
+	lobby.OwnerID = drawer.ID
+
+	guesser := lobby.JoinPlayer("guesser")
+	guesser.Connected = true
+	guesser.State = Standby
+	oldScore := ChillScoring.CalculateGuesserScoreAtTime(2, 2, 120, guessTime, oldRoundEnd)
+	guesser.Score = oldScore
+	guesser.LastScore = oldScore
+	guesser.currentRoundGuessTime = guessTime
+	guesser.currentRoundHintsLeft = 2
+	guesser.currentRoundGuessScore = oldScore
+	guesser.currentRoundGuessed = true
+
+	lobby.ApplyDrawingTime(60)
+
+	expectedRoundEnd := roundStart + 60_000
+	expectedScore := ChillScoring.CalculateGuesserScoreAtTime(2, 2, 60, guessTime, expectedRoundEnd)
+
+	require.Equal(t, 60, lobby.DrawingTime)
+	require.Equal(t, expectedRoundEnd, lobby.roundEndTime)
+	require.Equal(t, expectedScore, guesser.Score)
+	require.Equal(t, expectedScore, guesser.LastScore)
+	require.Equal(t, expectedScore, guesser.currentRoundGuessScore)
+	require.Equal(t, 1, lobby.hintsLeft)
+	require.Equal(t, 1, lobby.countRevealedHints())
+}
+
+func TestApplyDrawingTimeEndsElapsedTurnImmediately(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().UnixMilli()
+	roundStart := now - 50_000
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       120,
+			Rounds:            1,
+			AssignRandomNames: true,
+		},
+		State:            Ongoing,
+		ScoreCalculation: ChillScoring,
+		CurrentWord:      "secret",
+		Round:            1,
+		roundStartTime:   roundStart,
+		roundEndTime:     roundStart + 120_000,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	drawer := lobby.JoinPlayer("drawer")
+	drawer.Connected = true
+	drawer.State = Drawing
+	lobby.OwnerID = drawer.ID
+
+	lobby.ApplyDrawingTime(40)
+
+	require.Equal(t, GameOver, lobby.State)
+	require.Empty(t, lobby.CurrentWord)
+	require.Zero(t, lobby.roundStartTime)
+}

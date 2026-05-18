@@ -201,7 +201,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	lobbyPassword, lobbyPasswordInvalid := api.ParseLobbyPassword(request.Form.Get("password"))
 	assignRandomNames, assignRandomNamesInvalid := api.ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
 	if request.Form.Get("assign_random_names") == "" {
-		assignRandomNames = true
+		assignRandomNames = false
 	}
 	if request.Form.Get("allowed_edit_distance_percent") == "" {
 		allowedEditDistancePercent, allowedEditDistancePercentInvalid = api.ParseAllowedEditDistancePercent(handler.cfg, handler.cfg.LobbySettingDefaults.AllowedEditDistancePercent)

@@ -682,6 +682,25 @@ kbd {
     margin-top: 0.5rem;
 }
 
+#game-over-dialog {
+    width: min(56rem, 80%);
+    min-height: min(70vh, 48rem);
+}
+
+#game-over-dialog .center-dialog-content {
+    min-height: 0;
+    width: min(48rem, 100%);
+}
+
+#game-over-scoreboard {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    width: 100%;
+}
+
 .gameover-scoreboard-entry {
     font-size: 1.3rem;
     padding: 0.3rem 1rem 0.3rem 1rem;

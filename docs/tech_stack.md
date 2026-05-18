@@ -21,6 +21,7 @@ This document gives a high-level map of the Scribble.rs codebase and the main te
   - global lobby registry protected by an RW mutex (`internal/state/lobbies.go`)
   - each lobby has its own mutex for game-state mutation (`internal/game/data.go`)
   - each active turn uses a per-lobby ticker goroutine for round timing and hint reveal logic (`internal/game/lobby.go`)
+  - owner lobby-setting changes can retime an already active round and push immediate timer resync events (`internal/api/v1.go`, `internal/game/lobby.go`)
   - WebSocket read loops run per connection (`internal/api/ws.go`)
 
 ## Major packages / modules
@@ -147,7 +148,7 @@ Fed by `-ldflags` in CI/builds.
   - permessage-deflate enabled
   - ping/pong deadline management
 - **Application protocol**: JSON event messages shared between server and client (`internal/game/shared.go`)
-  - examples: `ready`, `word-chosen`, `update-wordhint`, `line`, `fill`, `message`, `next-turn`
+  - examples: `ready`, `word-chosen`, `update-wordhint`, `round-time-updated`, `line`, `fill`, `message`, `next-turn`
 - **Sessions**: cookie-based (`usersession`, `lobby-id`, optional Discord activity cookies) (`internal/api/v1.go`)
 
 ## Frontend delivery model
