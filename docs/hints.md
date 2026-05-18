@@ -207,6 +207,8 @@ Code path:
 - spaces
 - dashes
 - underscores
+- zero-width non-joiners
+- combining modifier marks such as the Persian/Arabic hamza above in `بوسهٔ`
 
 It also transliterates some accented characters.
 

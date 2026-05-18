@@ -252,6 +252,11 @@ Ranks are recalculated from total `Score`:
 
 The player list order is not sorted by rank because that order is also used for draw rotation.
 
+If a lobby owner enables hidden mid-game scores, ongoing `ready`, `next-turn`,
+and `update-players` payloads redact `Score`, `LastScore`, and `Rank` and sort
+the visible player list alphabetically by display name. The real scores remain
+server-side and are shown again in the game-over leaderboard.
+
 ## Parsing / API values
 
 `ParseScoreCalculation` accepts:

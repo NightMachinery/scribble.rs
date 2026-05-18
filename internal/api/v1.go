@@ -130,6 +130,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	wordsPerTurn, wordsPerTurnInvalid := ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
 	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
 	assignRandomNames, assignRandomNamesInvalid := ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
+	hideScoresMidGame, hideScoresMidGameInvalid := ParseBoolean("hide_scores_mid_game", request.Form.Get("hide_scores_mid_game"))
 	if request.Form.Get("assign_random_names") == "" {
 		assignRandomNames = false
 	}
@@ -191,6 +192,9 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 	if assignRandomNamesInvalid != nil {
 		requestErrors = append(requestErrors, assignRandomNamesInvalid.Error())
 	}
+	if hideScoresMidGameInvalid != nil {
+		requestErrors = append(requestErrors, hideScoresMidGameInvalid.Error())
+	}
 
 	if len(requestErrors) != 0 {
 		http.Error(writer, strings.Join(requestErrors, ";"), http.StatusBadRequest)
@@ -208,6 +212,7 @@ func (handler *V1Handler) postLobby(writer http.ResponseWriter, request *http.Re
 		Public:                     publicLobby,
 		WordsPerTurn:               wordsPerTurn,
 		AssignRandomNames:          assignRandomNames,
+		HideScoresMidGame:          hideScoresMidGame,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName,
 		wordpackKey, lobbySettings, customWords, scoreCalculation)
@@ -472,6 +477,7 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	lobbyPassword, lobbyPasswordInvalid := ParseLobbyPassword(request.Form.Get("password"))
 	clearPassword, clearPasswordInvalid := ParseBoolean("clear_password", request.Form.Get("clear_password"))
 	assignRandomNames, assignRandomNamesInvalid := ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
+	hideScoresMidGame, hideScoresMidGameInvalid := ParseBoolean("hide_scores_mid_game", request.Form.Get("hide_scores_mid_game"))
 
 	if wordsPerTurn < customWordsPerTurn {
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
@@ -521,6 +527,9 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	if assignRandomNamesInvalid != nil {
 		requestErrors = append(requestErrors, assignRandomNamesInvalid.Error())
 	}
+	if hideScoresMidGameInvalid != nil {
+		requestErrors = append(requestErrors, hideScoresMidGameInvalid.Error())
+	}
 	if lobbyPassword != "" && clearPassword {
 		requestErrors = append(requestErrors, "can't set and clear the lobby password in the same request")
 	}
@@ -545,6 +554,7 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 		lobby.WordsPerTurn = wordsPerTurn
 		lobby.AllowedEditDistancePercent = allowedEditDistancePercent
 		lobby.AssignRandomNames = assignRandomNames
+		lobby.HideScoresMidGame = hideScoresMidGame
 		lobby.ApplyDrawingTime(drawingTime)
 		if clearPassword {
 			lobby.ClearJoinPassword()

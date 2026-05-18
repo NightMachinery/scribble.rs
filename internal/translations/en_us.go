@@ -5,7 +5,8 @@ func initEnglishTranslation() *Translation {
 
 	translation.put("requires-js", "This website requires JavaScript to run properly.")
 
-	translation.put("start-the-game", "Ready up!")
+	translation.put("start-the-game", "Start game")
+	translation.put("start-game", "Start Game")
 	translation.put("force-start", "Force Start")
 	translation.put("force-restart", "Force Restart")
 	translation.put("game-not-started-title", "Game hasn't started")
@@ -35,7 +36,9 @@ func initEnglishTranslation() *Translation {
 	translation.put("apply", "Apply")
 	translation.put("save", "Save")
 	translation.put("toggle-fullscreen", "Toggle fullscreen")
+	translation.put("toggle-landscape", "Landscape drawing mode")
 	translation.put("toggle-spectate", "Toggle spectator mode")
+	translation.put("current-painter", "Painter")
 	translation.put("players-title", "Players")
 	translation.put("observers-title", "Observers")
 	translation.put("observer-label", "Observer")
@@ -178,6 +181,7 @@ func initEnglishTranslation() *Translation {
 	translation.put("owner-forced-participation", "%s was restored to active play by the lobby owner.")
 	translation.put("owner-ended-game", "%s ended the current game.")
 	translation.put("assign-random-names-setting", "Give new players random names")
+	translation.put("hide-scores-mid-game-setting", "Hide scores mid-game")
 	translation.put("choose-name-placeholder", "Choose a name")
 	translation.put("name-required-title", "Choose a name")
 	translation.put("name-required-text", "You need to choose a name before you can play or chat.")

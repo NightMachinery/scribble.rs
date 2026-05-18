@@ -214,16 +214,48 @@ func Test_recalculateRanksIncludesDisconnectedNonSpectators(t *testing.T) {
 	require.Equal(t, 2, lobby.players[1].Rank)
 }
 
-func Test_readyToStartIgnoresSpectators(t *testing.T) {
+func Test_playersForClientHidesAndAlphabetizesScoresMidGame(t *testing.T) {
 	t.Parallel()
 
-	lobby := &Lobby{}
-	lobby.players = []*Player{
-		{Connected: true, State: Ready},
-		{Connected: true, State: Spectating},
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			HideScoresMidGame: true,
+		},
+		State: Ongoing,
+		players: []*Player{
+			{Name: "Zed", Score: 30, LastScore: 10, Rank: 1, ID: uuid.Must(uuid.NewV4())},
+			{Name: "amy", Score: 20, LastScore: 5, Rank: 2, ID: uuid.Must(uuid.NewV4())},
+			{Name: "Bob", Score: 10, LastScore: 1, Rank: 3, ID: uuid.Must(uuid.NewV4())},
+		},
 	}
 
-	require.True(t, lobby.readyToStart())
+	players := lobby.playersForClient()
+
+	require.Equal(t, []string{"amy", "Bob", "Zed"}, []string{players[0].Name, players[1].Name, players[2].Name})
+	for _, player := range players {
+		require.Zero(t, player.Score)
+		require.Zero(t, player.LastScore)
+		require.Zero(t, player.Rank)
+	}
+	require.Equal(t, []string{"Zed", "amy", "Bob"}, []string{lobby.players[0].Name, lobby.players[1].Name, lobby.players[2].Name})
+}
+
+func Test_toggleReadinessIsCompatibilityNoop(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		State: Unstarted,
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	player := lobby.JoinPlayer("player")
+	player.Connected = true
+	player.State = Standby
+
+	require.NoError(t, lobby.HandleEvent(EventTypeToggleReadiness, nil, player))
+	require.Equal(t, Standby, player.State)
+	require.Equal(t, Unstarted, lobby.State)
 }
 
 func Test_OnPlayerDisconnectPreservesSpectatorOutsideOngoing(t *testing.T) {

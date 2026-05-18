@@ -107,7 +107,7 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 			player.SpectateToggleRequested = false
 		}
 
-		lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+		lobby.BroadcastPlayerUpdate()
 	} else if eventType == EventTypeMessage {
 		var message StringDataEvent
 		if err := json.Unmarshal(payload, &message); err != nil {
@@ -233,7 +233,8 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 	} else if eventType == EventTypeOwnerForceEndGame {
 		handleOwnerForceEndGameEvent(lobby, player)
 	} else if eventType == EventTypeToggleReadiness {
-		lobby.handleToggleReadinessEvent(player)
+		// Readiness is kept as a no-op for old clients. Starting and restarting
+		// are owner-only actions.
 	} else if eventType == EventTypeStart {
 		if lobby.State != Ongoing && player.ID == lobby.OwnerID && !player.NeedsName {
 			lobby.startGame()
@@ -254,41 +255,6 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 	}
 
 	return nil
-}
-
-func (lobby *Lobby) handleToggleReadinessEvent(player *Player) {
-	if lobby.State != Ongoing && player.State != Spectating && !player.NeedsName {
-		if player.State != Ready {
-			player.State = Ready
-		} else {
-			player.State = Standby
-		}
-
-		if lobby.readyToStart() {
-			lobby.startGame()
-		} else {
-			lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
-		}
-	}
-}
-
-func (lobby *Lobby) readyToStart() bool {
-	// Otherwise the game will start and gameover instantly. This can happen
-	// if a lobby is created and the owner refreshes.
-	var hasConnectedPlayers bool
-
-	for _, otherPlayer := range lobby.players {
-		if !otherPlayer.Connected || otherPlayer.State == Spectating {
-			continue
-		}
-
-		if otherPlayer.State != Ready {
-			return false
-		}
-		hasConnectedPlayers = true
-	}
-
-	return hasConnectedPlayers
 }
 
 func isRatelimited(sender *Player) bool {
@@ -382,7 +348,7 @@ func handleMessage(message string, sender *Player, lobby *Lobby) {
 				// Since the word has been guessed correctly, we reveal it.
 				_ = lobby.WriteObject(sender, Event{Type: EventTypeUpdateWordHint, Data: lobby.wordHintsShown})
 				recalculateRanks(lobby)
-				lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+				lobby.BroadcastPlayerUpdate()
 			}
 		}
 	case distance == 1:
@@ -675,7 +641,7 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 			// This isn't necessary in case we need to advanced the lobby, as it has
 			// to happen anyways and sending events twice would be wasteful.
 			recalculateRanks(lobby)
-			lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+			lobby.BroadcastPlayerUpdate()
 		} else {
 			advanceLobby(lobby)
 		}
@@ -721,7 +687,7 @@ func forcePlayerToSpectate(lobby *Lobby, playerToSpectate *Player, playerIndex i
 	}
 
 	recalculateRanks(lobby)
-	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+	lobby.BroadcastPlayerUpdate()
 }
 
 func forcePlayerToParticipate(lobby *Lobby, playerToParticipate *Player) {
@@ -744,7 +710,7 @@ func forcePlayerToParticipate(lobby *Lobby, playerToParticipate *Player) {
 		},
 	})
 	recalculateRanks(lobby)
-	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+	lobby.BroadcastPlayerUpdate()
 }
 
 func (lobby *Lobby) Drawer() *Player {
@@ -971,7 +937,7 @@ func (lobby *Lobby) ApplyDrawingTime(drawingTime int) {
 	}
 
 	lobby.broadcastRoundTimeUpdated()
-	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+	lobby.BroadcastPlayerUpdate()
 }
 
 // advanceLobbyPredefineDrawer is required in cases where the drawer is removed
@@ -1060,7 +1026,7 @@ func advanceLobbyPredefineDrawer(lobby *Lobby, roundOver bool, newDrawer *Player
 		Type: EventTypeNextTurn,
 		Data: &NextTurn{
 			Round:          lobby.Round,
-			Players:        lobby.players,
+			Players:        lobby.playersForClient(),
 			ChoiceTimeLeft: wordChoiceDuration * 1000,
 			PreviousWord:   previousWord,
 			RoundEndReason: currentRoundEndReason,
@@ -1330,6 +1296,44 @@ func recalculateRanks(lobby *Lobby) {
 	}
 }
 
+func (lobby *Lobby) shouldHideScoresMidGame() bool {
+	return lobby.State == Ongoing && lobby.HideScoresMidGame
+}
+
+func (lobby *Lobby) playersForClient() []*Player {
+	if !lobby.shouldHideScoresMidGame() {
+		return lobby.players
+	}
+
+	players := make([]*Player, 0, len(lobby.players))
+	for _, player := range lobby.players {
+		playerCopy := *player
+		playerCopy.Score = 0
+		playerCopy.LastScore = 0
+		playerCopy.Rank = 0
+		players = append(players, &playerCopy)
+	}
+
+	sort.SliceStable(players, func(a, b int) bool {
+		aName := strings.ToLower(SanitizeNameInput(players[a].Name))
+		bName := strings.ToLower(SanitizeNameInput(players[b].Name))
+		if aName == bName {
+			return players[a].ID.String() < players[b].ID.String()
+		}
+		return aName < bName
+	})
+
+	return players
+}
+
+func (lobby *Lobby) PlayerUpdateEvent() *Event {
+	return &Event{Type: EventTypeUpdatePlayers, Data: lobby.playersForClient()}
+}
+
+func (lobby *Lobby) BroadcastPlayerUpdate() {
+	lobby.Broadcast(lobby.PlayerUpdateEvent())
+}
+
 func (lobby *Lobby) selectWord(index int) error {
 	if lobby.State != Ongoing {
 		return errors.New("word was chosen, even though the game wasn't ongoing")
@@ -1456,7 +1460,7 @@ func CreateLobby(
 	// customWords are lowercased afterwards, as they are direct user input.
 	if len(customWords) > 0 {
 		for customWordIndex, customWord := range customWords {
-			customWords[customWordIndex] = lobby.lowercaser.String(customWord)
+			customWords[customWordIndex] = sanitize.StripModifierCharacters(lobby.lowercaser.String(customWord))
 		}
 	}
 
@@ -1484,8 +1488,9 @@ func generateReadyData(lobby *Lobby, player *Player) *ReadyEvent {
 		Round:              lobby.Round,
 		Rounds:             lobby.Rounds,
 		DrawingTimeSetting: lobby.DrawingTime,
+		HideScoresMidGame:  lobby.HideScoresMidGame,
 		WordHints:          lobby.GetAvailableWordHints(player),
-		Players:            lobby.players,
+		Players:            lobby.playersForClient(),
 		CurrentDrawing:     lobby.currentDrawing,
 	}
 
@@ -1526,10 +1531,7 @@ func (lobby *Lobby) OnPlayerConnectUnsynchronized(player *Player) {
 	// The player that just joined already has the most up-to-date data due
 	// to the ready event being sent. Therefeore it'd be wasteful to send
 	// that player and update event for players.
-	lobby.broadcastConditional(&Event{
-		Type: EventTypeUpdatePlayers,
-		Data: lobby.players,
-	}, ExcludePlayer(player))
+	lobby.broadcastConditional(lobby.PlayerUpdateEvent(), ExcludePlayer(player))
 }
 
 func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
@@ -1552,16 +1554,9 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 	player.disconnectTime = &disconnectTime
 	lobby.LastPlayerDisconnectTime = &disconnectTime
 
-	// Reset from potentially ready to standby
 	if lobby.State != Ongoing {
 		if player.State != Spectating {
 			player.State = Standby
-		}
-		if lobby.readyToStart() {
-			lobby.startGame()
-			// Rank Calculation and sending out player updates happened anyway,
-			// so there's no need to keep going.
-			return
 		}
 	}
 
@@ -1569,7 +1564,7 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 	// points when disconnecting, they shouldn't preserve their ranking. Upon
 	// reconnecting, the ranking will be recalculated though.
 	recalculateRanks(lobby)
-	lobby.Broadcast(&Event{Type: EventTypeUpdatePlayers, Data: lobby.players})
+	lobby.BroadcastPlayerUpdate()
 }
 
 // GetAvailableWordHints returns a WordHint array depending on the players

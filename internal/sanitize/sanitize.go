@@ -2,6 +2,7 @@
 package sanitize
 
 import (
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -83,6 +84,31 @@ var transliterations = map[rune]string{
 	'ß': "ss",
 }
 
+// StripModifierCharacters removes combining marks that modify nearby letters
+// but should not act as standalone target-word characters.
+func StripModifierCharacters(str string) string {
+	var buffer []byte
+
+	for index, character := range str {
+		if unicode.Is(unicode.Mn, character) {
+			if buffer == nil {
+				buffer = make([]byte, 0, len(str))
+				buffer = append(buffer, str[:index]...)
+			}
+			continue
+		}
+		if buffer != nil {
+			buffer = utf8.AppendRune(buffer, character)
+		}
+	}
+
+	if buffer == nil {
+		return str
+	}
+
+	return string(buffer)
+}
+
 // CleanText removes all kinds of characters that could disturb the algorithm
 // checking words for similarity.
 func CleanText(str string) string {
@@ -108,7 +134,7 @@ func CleanText(str string) string {
 			continue
 		}
 
-		if character == '\u200c' {
+		if character == '\u200c' || unicode.Is(unicode.Mn, character) {
 			changed = true
 			continue
 		}

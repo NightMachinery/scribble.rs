@@ -222,6 +222,7 @@ type ReadyEvent struct {
 	Rounds             int         `json:"rounds"`
 	TimeLeft           int         `json:"timeLeft"`
 	DrawingTimeSetting int         `json:"drawingTimeSetting"`
+	HideScoresMidGame  bool        `json:"hideScoresMidGame"`
 	AllowDrawing       bool        `json:"allowDrawing"`
 }
 
@@ -346,4 +347,6 @@ type EditableLobbySettings struct {
 	WordsPerTurn int `json:"wordsPerTurn"`
 	// AssignRandomNames controls whether players without a provided name get a generated random name.
 	AssignRandomNames bool `json:"assignRandomNames"`
+	// HideScoresMidGame hides scores and ranks from player updates while a game is ongoing.
+	HideScoresMidGame bool `json:"hideScoresMidGame"`
 }

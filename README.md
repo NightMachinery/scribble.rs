@@ -12,6 +12,11 @@ advertisements and you don't need an account to play.
 
 It is an alternative to the web-based drawing game skribbl.io.
 
+Lobby creators moderate the room: only the creator can start or restart a
+game, and live lobby settings include round time and optional hidden mid-game
+scores. When scores are hidden, the in-game player list is alphabetical until
+the final leaderboard reveals the real scores.
+
 ## Play now
 
 There are some community hosted versions of the game (feel free to host your own instance and add it here!):

@@ -75,6 +75,7 @@ const copyLobbyLinkMenuButton = document.getElementById(
 );
 const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
+const toggleLandscapeButton = document.getElementById("toggle-landscape-button");
 const toggleSpectateButton = document.getElementById("toggle-spectate-button");
 const ownerForceEndGameButton = document.getElementById(
     "owner-force-end-game-button",
@@ -88,6 +89,9 @@ const lobbySettingsAllowedEditDistancePercent = document.getElementById(
 const lobbySettingsAssignRandomNames = document.getElementById(
     "lobby-settings-assign-random-names",
 );
+const lobbySettingsHideScoresMidGame = document.getElementById(
+    "lobby-settings-hide-scores-mid-game",
+);
 const lobbySettingsClearPassword = document.getElementById(
     "lobby-settings-clear-password",
 );
@@ -97,10 +101,16 @@ const lobbySettingsPasswordStatus = document.getElementById(
 
 const startDialog = document.getElementById("start-dialog");
 const forceStartButton = document.getElementById("force-start-button");
+const waitingForOwnerStart = document.getElementById("waiting-for-owner-start");
 const gameOverDialog = document.getElementById("game-over-dialog");
 const gameOverDialogTitle = document.getElementById("game-over-dialog-title");
 const gameOverScoreboard = document.getElementById("game-over-scoreboard");
 const forceRestartButton = document.getElementById("force-restart-button");
+const waitingForOwnerRestart = document.getElementById(
+    "waiting-for-owner-restart",
+);
+const currentPainter = document.getElementById("current-painter");
+const currentPainterName = document.getElementById("current-painter-name");
 const wordDialog = document.getElementById("word-dialog");
 const wordPreSelected = document.getElementById("word-preselected");
 const wordButtonContainer = document.getElementById("word-button-container");
@@ -585,8 +595,6 @@ function applyNameRequirementState() {
     const ownPlayer = getOwnPlayer();
     const mustChooseName = ownPlayer && ownPlayer.needsName;
     messageInput.disabled = mustChooseName;
-    document.getElementById("ready-state-start").disabled = mustChooseName;
-    document.getElementById("ready-state-game-over").disabled = mustChooseName;
     forceStartButton.disabled = mustChooseName;
     forceRestartButton.disabled = mustChooseName;
 
@@ -607,6 +615,30 @@ function toggleFullscreen() {
 document
     .getElementById("toggle-fullscreen-button")
     .addEventListener("click", toggleFullscreen);
+
+async function toggleLandscapeMode() {
+    hideMenu();
+    const enable = !document.body.classList.contains("mobile-landscape-mode");
+    document.body.classList.toggle("mobile-landscape-mode", enable);
+    toggleLandscapeButton.classList.toggle("header-button-active", enable);
+    toggleLandscapeButton.setAttribute("aria-pressed", enable ? "true" : "false");
+
+    try {
+        if (enable) {
+            if (document.fullscreenElement === null) {
+                await document.body.requestFullscreen();
+            }
+            if (screen.orientation && screen.orientation.lock) {
+                await screen.orientation.lock("landscape");
+            }
+        } else if (screen.orientation && screen.orientation.unlock) {
+            screen.orientation.unlock();
+        }
+    } catch (_error) {
+        // Some mobile browsers, notably iOS Safari, do not allow orientation locks.
+    }
+}
+toggleLandscapeButton.addEventListener("click", toggleLandscapeMode);
 
 function showLobbySettingsDialog() {
     hideMenu();
@@ -636,6 +668,7 @@ function updateLobbySettingsForm(settings) {
         settings.rounds;
     document.getElementById("lobby-settings-public").checked = settings.public;
     lobbySettingsAssignRandomNames.checked = settings.assignRandomNames;
+    lobbySettingsHideScoresMidGame.checked = settings.hideScoresMidGame;
     document.getElementById("lobby-settings-max-players").value =
         settings.maxPlayers;
     document.getElementById("lobby-settings-clients-per-ip-limit").value =
@@ -647,6 +680,7 @@ function updateLobbySettingsForm(settings) {
     lobbySettingsPassword.value = "";
     lobbySettingsClearPassword.checked = false;
     assignRandomNames = settings.assignRandomNames;
+    hideScoresMidGame = settings.hideScoresMidGame;
     updateLobbyPasswordStatus(settings.hasPassword);
 }
 
@@ -670,6 +704,7 @@ function saveLobbySettings() {
                     "lobby-settings-clients-per-ip-limit",
                 ).value,
                 assign_random_names: lobbySettingsAssignRandomNames.checked,
+                hide_scores_mid_game: lobbySettingsHideScoresMidGame.checked,
                 custom_words_per_turn: document.getElementById(
                     "lobby-settings-custom-words-per-turn",
                 ).value,
@@ -1116,20 +1151,6 @@ function setSpectateMode(requestedValue, spectatingValue) {
     updateSpectateButtonState();
 }
 
-function toggleReadiness() {
-    socket.send(
-        JSON.stringify({
-            type: "toggle-readiness",
-        }),
-    );
-}
-document
-    .getElementById("ready-state-start")
-    .addEventListener("change", toggleReadiness);
-document
-    .getElementById("ready-state-game-over")
-    .addEventListener("change", toggleReadiness);
-
 function forceStartGame() {
     socket.send(
         JSON.stringify({
@@ -1288,6 +1309,7 @@ let roundEndTime = 0;
 let gameState = "unstarted";
 let drawingTimeSetting = "∞";
 let assignRandomNames = lobbySettingsAssignRandomNames.checked;
+let hideScoresMidGame = lobbySettingsHideScoresMidGame.checked;
 
 const handleEvent = (parsed) => {
     if (parsed.type === "ready") {
@@ -1350,6 +1372,8 @@ const handleEvent = (parsed) => {
         }
         if (parsed.data.playerId === drawerID) {
             waitChooseDrawerSpan.innerText = getDisplayPlayerName(changedPlayer);
+            drawerName = getDisplayPlayerName(changedPlayer);
+            updateCurrentPainter();
         }
     } else if (parsed.type === "correct-guess") {
         playWav('{{.RootPath}}/resources/{{.WithCacheBust "plop.wav"}}');
@@ -1388,7 +1412,7 @@ const handleEvent = (parsed) => {
             var hints = parsed.data
                 .map((hint) => {
                     if (hint.character) {
-                        var char = String.fromCharCode(hint.character);
+                        var char = String.fromCodePoint(hint.character);
                         if (char === " " || hint.revealed) {
                             return char;
                         }
@@ -1478,6 +1502,7 @@ const handleEvent = (parsed) => {
             //First turn, the game starts
             gameState = "ongoing";
         }
+        document.body.classList.toggle("scores-hidden", hideScoresMidGame);
         updateButtonVisibilities();
 
         //As soon as a turn starts, the round should be ongoing, so we make
@@ -1592,6 +1617,11 @@ const handleEvent = (parsed) => {
     } else if (parsed.type === "lobby-settings-changed") {
         rounds = parsed.data.rounds;
         drawingTimeSetting = parsed.data.drawingTime;
+        hideScoresMidGame = parsed.data.hideScoresMidGame;
+        document.body.classList.toggle(
+            "scores-hidden",
+            gameState === "ongoing" && hideScoresMidGame,
+        );
         updateRoundsDisplay();
         updateLobbySettingsForm(parsed.data);
         updateButtonVisibilities();
@@ -1622,6 +1652,9 @@ const handleEvent = (parsed) => {
                 "\n" +
                 '{{.Translation.Get "assign-random-names-setting"}}: ' +
                 parsed.data.assignRandomNames +
+                "\n" +
+                '{{.Translation.Get "hide-scores-mid-game-setting"}}: ' +
+                parsed.data.hideScoresMidGame +
                 "\n" +
                 '{{.Translation.Get "words-per-turn-setting"}}: ' +
                 parsed.data.wordsPerTurn +
@@ -1704,6 +1737,12 @@ const handleReadyEvent = (ready) => {
     rounds = ready.rounds;
     gameState = ready.gameState;
     drawingTimeSetting = ready.drawingTimeSetting;
+    hideScoresMidGame = ready.hideScoresMidGame;
+    lobbySettingsHideScoresMidGame.checked = hideScoresMidGame;
+    document.body.classList.toggle(
+        "scores-hidden",
+        gameState === "ongoing" && hideScoresMidGame,
+    );
     updateRoundsDisplay();
     updateButtonVisibilities();
 
@@ -1724,15 +1763,19 @@ const handleReadyEvent = (ready) => {
         startDialog.style.visibility = "visible";
         if (ownerID === ownID) {
             forceStartButton.style.display = "block";
+            waitingForOwnerStart.style.display = "none";
         } else {
             forceStartButton.style.display = "none";
+            waitingForOwnerStart.style.display = "";
         }
     } else if (ready.gameState === "gameOver") {
         gameOverDialog.style.visibility = "visible";
         if (ownerID === ownID) {
             forceRestartButton.style.display = "block";
+            waitingForOwnerRestart.style.display = "none";
         } else {
             forceRestartButton.style.display = "none";
+            waitingForOwnerRestart.style.display = "";
         }
 
         gameOverScoreboard.innerHTML = "";
@@ -1847,9 +1890,14 @@ function updateButtonVisibilities() {
 
 function promptWords(data) {
     wordPreSelected.textContent = data.words[data.preSelectedWord];
+    wordPreSelected.setAttribute(
+        "dir",
+        directionForText(data.words[data.preSelectedWord]),
+    );
     wordButtonContainer.replaceChildren(
         ...data.words.map((word, index) => {
             const button = createDialogButton(word);
+            button.setAttribute("dir", directionForText(word));
             button.onclick = () => {
                 chooseWord(index);
             };
@@ -1920,6 +1968,19 @@ function appendMessage(styleClass, author, message, attrs) {
 
 let cachedPlayers;
 
+function isScoreHiddenNow() {
+    return gameState === "ongoing" && hideScoresMidGame;
+}
+
+function comparePlayerNames(a, b) {
+    const aName = getDisplayPlayerName(a).toLocaleLowerCase();
+    const bName = getDisplayPlayerName(b).toLocaleLowerCase();
+    if (aName === bName) {
+        return a.id.localeCompare(b.id);
+    }
+    return aName.localeCompare(bName);
+}
+
 function createObserverBadge() {
     const observerBadge = document.createElement("span");
     observerBadge.classList.add("player-observer-badge");
@@ -1982,14 +2043,7 @@ function createPlayerRow(player, matchOngoing, isObserver) {
             );
             playerStateImage.style.transform = "scaleX(-1)";
             scoreAndStatusDiv.appendChild(playerStateImage);
-        } else if (player.state === "standby") {
-            const playerStateImage = createPlayerStateImageNode(
-                `{{.RootPath}}/resources/{{.WithCacheBust "checkmark.svg"}}`,
-            );
-            scoreAndStatusDiv.appendChild(playerStateImage);
         }
-    } else if (!isObserver && player.state === "ready") {
-        playerDiv.classList.add("player-ready");
     }
 
     if (isObserver) {
@@ -1997,7 +2051,7 @@ function createPlayerRow(player, matchOngoing, isObserver) {
     } else {
         const rankSpan = document.createElement("span");
         rankSpan.classList.add("rank");
-        rankSpan.innerText = player.rank;
+        rankSpan.innerText = isScoreHiddenNow() ? "" : player.rank;
         playerDiv.appendChild(rankSpan);
     }
 
@@ -2016,13 +2070,14 @@ function createPlayerRow(player, matchOngoing, isObserver) {
 
     const playerscoreSpan = document.createElement("span");
     playerscoreSpan.classList.add("playerscore");
-    playerscoreSpan.innerText = player.score;
+    playerscoreSpan.innerText = isScoreHiddenNow() ? "" : player.score;
     playerscoreDiv.appendChild(playerscoreSpan);
 
     const lastPlayerscoreSpan = document.createElement("span");
     lastPlayerscoreSpan.classList.add("last-turn-score");
-    lastPlayerscoreSpan.innerText =
-        '{{.Translation.Get "last-turn"}}'.format(player.lastScore);
+    lastPlayerscoreSpan.innerText = isScoreHiddenNow()
+        ? ""
+        : '{{.Translation.Get "last-turn"}}'.format(player.lastScore);
     playerscoreDiv.appendChild(lastPlayerscoreSpan);
 
     const inlineActions = createOwnerInlineActions(player, isObserver);
@@ -2037,43 +2092,15 @@ function createPlayerRow(player, matchOngoing, isObserver) {
 //refreshes the scoreboard and updates the drawerID and drawerName variables.
 function applyPlayers(players) {
     const matchOngoing = gameState === "ongoing";
-    if (!matchOngoing) {
-        let readyPlayers = 0;
-        let readyPlayersRequired = 0;
-
-        players.forEach((player) => {
-            if (!player.connected || player.state === "spectating") {
-                return;
-            }
-
-            readyPlayersRequired = readyPlayersRequired + 1;
-            if (player.state === "ready") {
-                readyPlayers = readyPlayers + 1;
-            }
-
-            if (player.id === ownID) {
-                document.getElementById("ready-state-start").checked =
-                    player.state === "ready";
-                document.getElementById("ready-state-game-over").checked =
-                    player.state === "ready";
-            }
-        });
-
-        const readyCounts = document.getElementsByClassName("ready-count");
-        const reaadyNeededs = document.getElementsByClassName("ready-needed");
-
-        Array.from(readyCounts).forEach((element) => {
-            element.innerText = readyPlayers.toString();
-        });
-        Array.from(reaadyNeededs).forEach((element) => {
-            element.innerText = readyPlayersRequired.toString();
-        });
-    }
-
     playerContainer.innerHTML = "";
     observerContainer.innerHTML = "";
+    drawerID = undefined;
+    drawerName = "";
     let observerCount = 0;
-    players.forEach((player) => {
+    const visiblePlayers = isScoreHiddenNow()
+        ? players.slice().sort(comparePlayerNames)
+        : players;
+    visiblePlayers.forEach((player) => {
         // Makes sure that the "is choosing" a word dialog doesn't show
         // "undefined" as the player name. Can happen, if the player
         // disconnects after being assigned the drawer.
@@ -2127,6 +2154,7 @@ function applyPlayers(players) {
         playerContainer.appendChild(createPlayerRow(player, matchOngoing, false));
     });
     observerSection.style.display = observerCount > 0 ? "" : "none";
+    updateCurrentPainter();
 
     // We do this at the end, so we can access the old values while
     // iterating over the new ones
@@ -2140,9 +2168,22 @@ function createPlayerStateImageNode(path) {
     playerStateImage.src = path;
     return playerStateImage;
 }
+
+function updateCurrentPainter() {
+    const showPainter = gameState === "ongoing" && drawerName;
+    currentPainter.style.display = showPainter ? "inline-flex" : "none";
+    currentPainterName.innerText = showPainter ? drawerName : "";
+}
+
 function updateRoundsDisplay() {
     roundSpan.innerText = round;
     maxRoundSpan.innerText = rounds;
+}
+
+function directionForText(text) {
+    return /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufefc]/u.test(text)
+        ? "rtl"
+        : "ltr";
 }
 
 const applyWordHints = (wordHints, dummy) => {
@@ -2150,6 +2191,14 @@ const applyWordHints = (wordHints, dummy) => {
 
     let wordLengths = [];
     let count = 0;
+    let visibleText = "";
+
+    for (const hint of wordHints) {
+        if (hint.character) {
+            visibleText += String.fromCodePoint(hint.character);
+        }
+    }
+    wordContainer.setAttribute("dir", directionForText(visibleText));
 
     wordContainer.replaceChildren(
         ...wordHints.map((hint, index) => {
@@ -2165,7 +2214,7 @@ const applyWordHints = (wordHints, dummy) => {
                 if (hint.underline) {
                     hintSpan.classList.add("hint-underline");
                 }
-                hintSpan.innerText = String.fromCharCode(hint.character);
+                hintSpan.innerText = String.fromCodePoint(hint.character);
             }
 
             // space

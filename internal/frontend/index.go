@@ -200,6 +200,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	wordsPerTurn, wordsPerTurnInvalid := api.ParseWordsPerTurn(handler.cfg, request.Form.Get("words_per_turn"))
 	lobbyPassword, lobbyPasswordInvalid := api.ParseLobbyPassword(request.Form.Get("password"))
 	assignRandomNames, assignRandomNamesInvalid := api.ParseBoolean("assign_random_names", request.Form.Get("assign_random_names"))
+	hideScoresMidGame, hideScoresMidGameInvalid := api.ParseBoolean("hide_scores_mid_game", request.Form.Get("hide_scores_mid_game"))
 	if request.Form.Get("assign_random_names") == "" {
 		assignRandomNames = false
 	}
@@ -287,6 +288,9 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 	if assignRandomNamesInvalid != nil {
 		pageData.Errors = append(pageData.Errors, assignRandomNamesInvalid.Error())
 	}
+	if hideScoresMidGameInvalid != nil {
+		pageData.Errors = append(pageData.Errors, hideScoresMidGameInvalid.Error())
+	}
 
 	translation, locale := determineTranslation(request)
 	pageData.Translation = translation
@@ -321,6 +325,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 		Public:                     publicLobby,
 		WordsPerTurn:               wordsPerTurn,
 		AssignRandomNames:          assignRandomNames,
+		HideScoresMidGame:          hideScoresMidGame,
 	}
 	player, lobby, err := game.CreateLobby(lobbyId, playerName, wordpackKey,
 		lobbySettings, customWords, scoreCalculation)

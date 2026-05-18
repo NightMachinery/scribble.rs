@@ -43,7 +43,7 @@ Core domain/gameplay package.
 Responsibilities:
 
 - lobby creation and turn progression
-- player state (`Guessing`, `Drawing`, `Standby`, `Ready`, `Spectating`)
+- player state (`Guessing`, `Drawing`, `Standby`, `Spectating`; legacy `Ready` is no longer used by the official client)
 - drawing-board event handling (`line`, `fill`, `undo`, `clear-drawing-board`)
 - scoring modes (`chill`, `competitive`)
 - hint generation/reveal
@@ -148,7 +148,7 @@ Fed by `-ldflags` in CI/builds.
   - permessage-deflate enabled
   - ping/pong deadline management
 - **Application protocol**: JSON event messages shared between server and client (`internal/game/shared.go`)
-  - examples: `ready`, `word-chosen`, `update-wordhint`, `round-time-updated`, `line`, `fill`, `message`, `next-turn`
+  - examples: `ready`, `word-chosen`, `update-wordhint`, `round-time-updated`, `lobby-settings-changed`, `line`, `fill`, `message`, `next-turn`
 - **Sessions**: cookie-based (`usersession`, `lobby-id`, optional Discord activity cookies) (`internal/api/v1.go`)
 
 ## Frontend delivery model

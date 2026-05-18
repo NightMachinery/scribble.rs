@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/scribble-rs/scribble.rs/internal/sanitize"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -111,7 +112,7 @@ func readWordListInternal(
 	}
 
 	// Wordlists are guaranteed not to contain any carriage returns (\r).
-	words := strings.Split(lowercaser.String(wordListFile), "\n")
+	words := strings.Split(sanitize.StripModifierCharacters(lowercaser.String(wordListFile)), "\n")
 	shuffleWordList(words)
 	return words, nil
 }
