@@ -89,6 +89,13 @@
                                         class="header-button-image" />
                                     {{.Translation.Get "toggle-spectate"}}
                                 </button>
+                                <button id="pause-game-button" class="dialog-button menu-item header-button"
+                                    alt="{{.Translation.Get "pause-game"}}"
+                                    title="{{.Translation.Get "pause-game"}}" style="display: none;">
+                                    <img src='{{.RootPath}}/resources/{{.WithCacheBust "clock.svg"}}'
+                                        class="header-button-image" />
+                                    <span id="pause-game-button-label">{{.Translation.Get "pause-game"}}</span>
+                                </button>
                                 <button id="help-button" class="dialog-button menu-item header-button"
                                     alt="{{.Translation.Get "show-help"}}" title="{{.Translation.Get "show-help"}}">
                                     <img src='{{.RootPath}}/resources/{{.WithCacheBust "help.svg"}}'

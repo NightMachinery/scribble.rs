@@ -513,9 +513,8 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 		wordsPerTurnInvalid = errors.New("words per turn must be greater than or equal to custom words per turn")
 	}
 
-	owner := lobby.GetOwner()
-	if owner == nil || owner.ID != caller.ID {
-		http.Error(writer, "only the lobby owner can edit the lobby", http.StatusForbidden)
+	if !lobby.CanManageLobbySettings(caller) {
+		http.Error(writer, "only lobby moderators can edit the lobby", http.StatusForbidden)
 		return
 	}
 

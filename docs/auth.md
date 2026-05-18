@@ -31,10 +31,35 @@ There are a few separate checks in play:
   the server tries `usersession`, then falls back to `client-id`
 - **Lobby selection**: the server uses the path lobby ID or `lobby-id` cookie
 - **Lobby password**: optional join gate for private lobbies; this is **not** a user identity system
-- **Owner permissions**: lobby-owner actions are authorized by comparing the
-  resolved player with the lobby owner
+- **Creator permissions**: the lobby creator is the original owner and this does
+  not transfer if they disconnect
+- **Moderator permissions**: creator-promoted or mod-promoted moderators can use
+  creator controls, including player management, settings, start/restart/end,
+  pause/resume, and eligible mod management
+- **Temporary moderator permissions**: if no creator or permanent mod is online
+  for five minutes, connected temp mods become active; if none exist, one
+  connected player is marked as a temp mod
 
 So the current system is better described as **cookie/header session identity + lobby-level authorization**, not account auth.
+
+## Creator and moderator model
+
+The initial lobby creator keeps permanent creator authority for the lifetime of
+the in-memory lobby. This role does not transfer to another player.
+
+The creator can promote or demote any moderator. Permanent moderators can
+promote other permanent moderators, but they can demote only moderators they
+promoted themselves. Temporary moderators follow the same chain rule, but any
+mods they promote are temporary mods.
+
+Temporary mod designations remain stored on the player. Temporary powers are
+active only while no creator or permanent moderator is online. When a real mod
+comes online, active temporary powers are disabled without deleting the temp
+designation.
+
+Moderators can pause and resume active games. Pausing freezes word-choice and
+round timers, hint reveal timing, and scoring time, while still allowing chat,
+drawing, and guesses.
 
 ## Room-scoped device migration
 

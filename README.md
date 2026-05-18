@@ -12,10 +12,11 @@ advertisements and you don't need an account to play.
 
 It is an alternative to the web-based drawing game skribbl.io.
 
-Lobby creators moderate the room: only the creator can start or restart a
-game, and live lobby settings include round time and optional hidden mid-game
-scores. When scores are hidden, the in-game player list is alphabetical until
-the final leaderboard reveals the real scores.
+Lobby creators moderate the room and can promote moderators. Moderators can
+help manage players, adjust live settings, pause or resume the game, and start
+or restart rounds. Live lobby settings include round time and optional hidden
+mid-game scores. When scores are hidden, the in-game player list is
+alphabetical until the final leaderboard reveals the real scores.
 
 Players can use the in-room **Migrate device** button to copy a room-specific
 link for continuing as the same player on another device without exposing the

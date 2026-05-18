@@ -20,6 +20,10 @@ const (
 	EventTypeOwnerForceSpectate    = "owner-force-spectate"
 	EventTypeOwnerForceParticipate = "owner-force-participate"
 	EventTypeOwnerForceEndGame     = "owner-force-end-game"
+	EventTypePromoteModerator      = "promote-moderator"
+	EventTypeDemoteModerator       = "demote-moderator"
+	EventTypePauseGame             = "pause-game"
+	EventTypeResumeGame            = "resume-game"
 	EventTypeRequestDrawing        = "request-drawing"
 	EventTypeChooseWord            = "choose-word"
 	EventTypeUndo                  = "undo"
@@ -43,6 +47,9 @@ const (
 	EventTypeOwnerChange              = "owner-change"
 	EventTypeLobbySettingsChanged     = "lobby-settings-changed"
 	EventTypeRoundTimeUpdated         = "round-time-updated"
+	EventTypeModeratorChanged         = "moderator-changed"
+	EventTypeGamePaused               = "game-paused"
+	EventTypeGameResumed              = "game-resumed"
 	EventTypeShutdown                 = "shutdown"
 	EventTypeKeepAlive                = "keep-alive"
 )
@@ -150,6 +157,15 @@ type PlayerEvent struct {
 	PlayerID   uuid.UUID `json:"playerId"`
 }
 
+type ModeratorChangedEvent struct {
+	PlayerName         string    `json:"playerName"`
+	PlayerID           uuid.UUID `json:"playerId"`
+	Moderator          bool      `json:"moderator"`
+	TemporaryModerator bool      `json:"temporaryModerator"`
+	ActiveModerator    bool      `json:"activeModerator"`
+	PromoterID         uuid.UUID `json:"promoterId,omitempty"`
+}
+
 type NameChangeEvent struct {
 	PlayerName string    `json:"playerName"`
 	PlayerID   uuid.UUID `json:"playerId"`
@@ -223,6 +239,8 @@ type ReadyEvent struct {
 	TimeLeft           int         `json:"timeLeft"`
 	DrawingTimeSetting int         `json:"drawingTimeSetting"`
 	HideScoresMidGame  bool        `json:"hideScoresMidGame"`
+	Paused             bool        `json:"paused"`
+	CanModerate        bool        `json:"canModerate"`
 	AllowDrawing       bool        `json:"allowDrawing"`
 }
 
@@ -275,9 +293,11 @@ type Player struct {
 	// disconnectTime is used to kick a player in case the lobby doesn't have
 	// space for new players. The player with the oldest disconnect.Time will
 	// get kicked.
-	disconnectTime   *time.Time
-	votedForKick     map[uuid.UUID]bool
-	lastKnownAddress string
+	disconnectTime    *time.Time
+	votedForKick      map[uuid.UUID]bool
+	lastKnownAddress  string
+	modPromoterID     uuid.UUID
+	tempModPromoterID uuid.UUID
 	// messageTimestamps are stored for ratelimiting reasons. See handleMessage.
 	messageTimestamps *Ring[time.Time]
 	// currentRoundGuess* keep enough state to recompute current-turn score
@@ -294,6 +314,12 @@ type Player struct {
 	AutoNamed bool `json:"autoNamed,omitempty"`
 	// NeedsName indicates that the player must still choose a real name.
 	NeedsName bool `json:"needsName,omitempty"`
+	// Moderator indicates permanent moderator status.
+	Moderator bool `json:"moderator,omitempty"`
+	// TemporaryModerator indicates fallback moderator designation.
+	TemporaryModerator bool `json:"temporaryModerator,omitempty"`
+	// ActiveModerator indicates whether permanent or temporary mod powers are active.
+	ActiveModerator bool `json:"activeModerator,omitempty"`
 	// SpectateToggleRequested is used for state changes between spectator and
 	// player. We want to prevent people from switching in and out of the Player
 	// state. While this will allow people to skip being the drawer, it will

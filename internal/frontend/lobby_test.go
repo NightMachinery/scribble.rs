@@ -209,7 +209,9 @@ func TestLobbyPageIncludesMigrateDeviceButton(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	require.Contains(t, body, `id="migrate-device-button"`)
+	require.Contains(t, body, `id="pause-game-button"`)
 	require.Contains(t, body, "Migrate device")
+	require.Contains(t, body, "Pause game")
 }
 
 func TestEnterLobbyWithRoomAuthDoesNotSetIdentityCookies(t *testing.T) {

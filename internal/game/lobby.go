@@ -36,10 +36,17 @@ const (
 )
 
 var disconnectGrace = 8 * time.Second
+var tempModeratorActivationDelay = 5 * time.Minute
 
 func SetDisconnectGrace(grace time.Duration) {
 	if grace > 0 {
 		disconnectGrace = grace
+	}
+}
+
+func SetTempModeratorActivationDelay(delay time.Duration) {
+	if delay > 0 {
+		tempModeratorActivationDelay = delay
 	}
 }
 
@@ -217,11 +224,35 @@ func (lobby *Lobby) HandleEvent(eventType string, payload []byte, player *Player
 		handleOwnerForceParticipateEvent(lobby, player, targetID)
 	} else if eventType == EventTypeOwnerForceEndGame {
 		handleOwnerForceEndGameEvent(lobby, player)
+	} else if eventType == EventTypePromoteModerator {
+		var moderatorEvent StringDataEvent
+		if err := json.Unmarshal(payload, &moderatorEvent); err != nil {
+			return fmt.Errorf("invalid data received: '%s'", string(payload))
+		}
+		targetID, err := uuid.FromString(moderatorEvent.Data)
+		if err != nil {
+			return fmt.Errorf("invalid data in promote-moderator event: %v", payload)
+		}
+		handlePromoteModeratorEvent(lobby, player, targetID)
+	} else if eventType == EventTypeDemoteModerator {
+		var moderatorEvent StringDataEvent
+		if err := json.Unmarshal(payload, &moderatorEvent); err != nil {
+			return fmt.Errorf("invalid data received: '%s'", string(payload))
+		}
+		targetID, err := uuid.FromString(moderatorEvent.Data)
+		if err != nil {
+			return fmt.Errorf("invalid data in demote-moderator event: %v", payload)
+		}
+		handleDemoteModeratorEvent(lobby, player, targetID)
+	} else if eventType == EventTypePauseGame {
+		handlePauseGameEvent(lobby, player)
+	} else if eventType == EventTypeResumeGame {
+		handleResumeGameEvent(lobby, player)
 	} else if eventType == EventTypeToggleReadiness {
 		// Readiness is kept as a no-op for old clients. Starting and restarting
 		// are owner-only actions.
 	} else if eventType == EventTypeStart {
-		if lobby.State != Ongoing && player.ID == lobby.OwnerID && !player.NeedsName {
+		if lobby.State != Ongoing && lobby.CanModerate(player) && !player.NeedsName {
 			lobby.startGame()
 		}
 	} else if eventType == EventTypeNameChange {
@@ -469,6 +500,9 @@ func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID uuid.UUID) {
 	}
 
 	playerToKick := lobby.players[playerToKickIndex]
+	if lobby.IsCreator(playerToKick) {
+		return
+	}
 
 	player.votedForKick[toKickID] = true
 	var voteKickCount int
@@ -500,7 +534,7 @@ func handleKickVoteEvent(lobby *Lobby, player *Player, toKickID uuid.UUID) {
 }
 
 func handleOwnerKickEvent(lobby *Lobby, owner *Player, toKickID uuid.UUID) {
-	if owner.ID != lobby.OwnerID || toKickID == owner.ID {
+	if !lobby.CanModerate(owner) || toKickID == owner.ID || toKickID == lobby.OwnerID {
 		return
 	}
 
@@ -521,7 +555,7 @@ func handleOwnerKickEvent(lobby *Lobby, owner *Player, toKickID uuid.UUID) {
 }
 
 func handleOwnerForceSpectateEvent(lobby *Lobby, owner *Player, targetID uuid.UUID) {
-	if owner.ID != lobby.OwnerID || targetID == owner.ID {
+	if !lobby.CanModerate(owner) || targetID == owner.ID || targetID == lobby.OwnerID {
 		return
 	}
 
@@ -534,7 +568,7 @@ func handleOwnerForceSpectateEvent(lobby *Lobby, owner *Player, targetID uuid.UU
 }
 
 func handleOwnerForceParticipateEvent(lobby *Lobby, owner *Player, targetID uuid.UUID) {
-	if owner.ID != lobby.OwnerID || targetID == owner.ID {
+	if !lobby.CanModerate(owner) || targetID == owner.ID || targetID == lobby.OwnerID {
 		return
 	}
 
@@ -547,7 +581,7 @@ func handleOwnerForceParticipateEvent(lobby *Lobby, owner *Player, targetID uuid
 }
 
 func handleOwnerForceEndGameEvent(lobby *Lobby, owner *Player) {
-	if owner.ID != lobby.OwnerID || lobby.State != Ongoing {
+	if !lobby.CanModerate(owner) || lobby.State != Ongoing {
 		return
 	}
 
@@ -560,6 +594,57 @@ func handleOwnerForceEndGameEvent(lobby *Lobby, owner *Player) {
 		},
 	})
 	endCurrentGame(lobby, lobby.CurrentWord)
+}
+
+func handlePauseGameEvent(lobby *Lobby, player *Player) {
+	if !lobby.CanModerate(player) || lobby.State != Ongoing || lobby.paused {
+		return
+	}
+
+	lobby.paused = true
+	lobby.pauseStartedAt = time.Now()
+	lobby.Broadcast(&Event{
+		Type: EventTypeGamePaused,
+		Data: &PlayerEvent{
+			PlayerID:   player.ID,
+			PlayerName: player.Name,
+		},
+	})
+}
+
+func handleResumeGameEvent(lobby *Lobby, player *Player) {
+	if !lobby.CanModerate(player) || lobby.State != Ongoing || !lobby.paused {
+		return
+	}
+
+	pausedDuration := time.Since(lobby.pauseStartedAt)
+	pausedMillis := int64(pausedDuration / time.Millisecond)
+	if !lobby.wordChoiceEndTime.IsZero() {
+		lobby.wordChoiceEndTime = lobby.wordChoiceEndTime.Add(pausedDuration)
+	}
+	if lobby.roundStartTime != 0 {
+		lobby.roundStartTime += pausedMillis
+	}
+	if lobby.roundEndTime != 0 {
+		lobby.roundEndTime += pausedMillis
+	}
+	for _, otherPlayer := range lobby.players {
+		if otherPlayer.currentRoundGuessTime != 0 {
+			otherPlayer.currentRoundGuessTime += pausedMillis
+		}
+	}
+
+	lobby.paused = false
+	lobby.pauseStartedAt = time.Time{}
+	lobby.Broadcast(&Event{
+		Type: EventTypeGameResumed,
+		Data: &PlayerEvent{
+			PlayerID:   player.ID,
+			PlayerName: player.Name,
+		},
+	})
+	lobby.broadcastRoundTimeUpdated()
+	lobby.BroadcastPlayerUpdate()
 }
 
 func getPlayerIndexByID(lobby *Lobby, playerID uuid.UUID) int {
@@ -575,6 +660,10 @@ func getPlayerIndexByID(lobby *Lobby, playerID uuid.UUID) int {
 // kickPlayer kicks the given player from the lobby, updating the lobby
 // state and sending all necessary events.
 func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
+	if lobby.IsCreator(playerToKick) {
+		return
+	}
+
 	// Avoiding nilpointer in case playerToKick disconnects during this event unluckily.
 	if playerToKickSocket := playerToKick.ws; playerToKickSocket != nil {
 		// 4k-5k is codes not in the spec, they are free to use.
@@ -586,24 +675,6 @@ func kickPlayer(lobby *Lobby, playerToKick *Player, playerToKickIndex int) {
 	// Since the player is already kicked, we first clean up the kicking information related to that player
 	for _, otherPlayer := range lobby.players {
 		delete(otherPlayer.votedForKick, playerToKick.ID)
-	}
-
-	// If the owner is kicked, we choose the next best person as the owner.
-	if lobby.OwnerID == playerToKick.ID {
-		for _, otherPlayer := range lobby.players {
-			potentialOwner := otherPlayer
-			if potentialOwner.ID != playerToKick.ID && potentialOwner.Connected {
-				lobby.OwnerID = potentialOwner.ID
-				lobby.Broadcast(&Event{
-					Type: EventTypeOwnerChange,
-					Data: &OwnerChangeEvent{
-						PlayerID:   potentialOwner.ID,
-						PlayerName: potentialOwner.Name,
-					},
-				})
-				break
-			}
-		}
 	}
 
 	if playerToKick.State == Drawing {
@@ -698,6 +769,142 @@ func forcePlayerToParticipate(lobby *Lobby, playerToParticipate *Player) {
 	lobby.BroadcastPlayerUpdate()
 }
 
+func (lobby *Lobby) refreshModeratorStateLocked() {
+	if lobby.hasConnectedRealModerator() {
+		if lobby.tempModActivationTimer != nil {
+			lobby.tempModActivationTimer.Stop()
+			lobby.tempModActivationTimer = nil
+		}
+		for _, player := range lobby.players {
+			player.ActiveModerator = player.Connected && player.Moderator
+		}
+		return
+	}
+
+	for _, player := range lobby.players {
+		player.ActiveModerator = player.Connected && (player.Moderator || (player.TemporaryModerator && player.ActiveModerator))
+	}
+
+	var activeTempExists bool
+	for _, player := range lobby.players {
+		if player.Connected && player.TemporaryModerator && player.ActiveModerator {
+			activeTempExists = true
+			break
+		}
+	}
+	if activeTempExists || lobby.tempModActivationTimer != nil {
+		return
+	}
+
+	lobby.tempModActivationTimer = time.AfterFunc(tempModeratorActivationDelay, func() {
+		lobby.mutex.Lock()
+		defer lobby.mutex.Unlock()
+
+		lobby.tempModActivationTimer = nil
+		lobby.activateTemporaryModeratorsLocked()
+	})
+}
+
+func (lobby *Lobby) activateTemporaryModeratorsLocked() {
+	if lobby.hasConnectedRealModerator() {
+		lobby.refreshModeratorStateLocked()
+		lobby.BroadcastPlayerUpdate()
+		return
+	}
+
+	var activated []*Player
+	for _, player := range lobby.players {
+		if player.Connected && player.TemporaryModerator {
+			player.ActiveModerator = true
+			activated = append(activated, player)
+		}
+	}
+
+	if len(activated) == 0 {
+		var candidates []*Player
+		for _, player := range lobby.players {
+			if player.Connected && !lobby.IsCreator(player) {
+				candidates = append(candidates, player)
+			}
+		}
+		if len(candidates) > 0 {
+			player := candidates[rand.IntN(len(candidates))]
+			player.TemporaryModerator = true
+			player.ActiveModerator = true
+			player.tempModPromoterID = uuid.Nil
+			activated = append(activated, player)
+		}
+	}
+
+	for _, player := range activated {
+		lobby.broadcastModeratorChanged(player)
+	}
+	lobby.BroadcastPlayerUpdate()
+}
+
+func handlePromoteModeratorEvent(lobby *Lobby, actor *Player, targetID uuid.UUID) {
+	if !lobby.CanModerate(actor) || targetID == actor.ID || targetID == lobby.OwnerID {
+		return
+	}
+
+	target := lobby.GetPlayerByID(targetID)
+	if target == nil {
+		return
+	}
+
+	if lobby.IsCreator(actor) || actor.Moderator {
+		target.Moderator = true
+		target.modPromoterID = actor.ID
+		target.TemporaryModerator = false
+		target.tempModPromoterID = uuid.Nil
+	} else if actor.ActiveModerator && actor.TemporaryModerator {
+		target.TemporaryModerator = true
+		target.tempModPromoterID = actor.ID
+		target.ActiveModerator = true
+	} else {
+		return
+	}
+
+	lobby.refreshModeratorStateLocked()
+	lobby.broadcastModeratorChanged(target)
+	lobby.BroadcastPlayerUpdate()
+}
+
+func handleDemoteModeratorEvent(lobby *Lobby, actor *Player, targetID uuid.UUID) {
+	target := lobby.GetPlayerByID(targetID)
+	if !lobby.canDemoteModerator(actor, target) {
+		return
+	}
+
+	target.Moderator = false
+	target.modPromoterID = uuid.Nil
+	target.TemporaryModerator = false
+	target.tempModPromoterID = uuid.Nil
+	target.ActiveModerator = false
+
+	lobby.refreshModeratorStateLocked()
+	lobby.broadcastModeratorChanged(target)
+	lobby.BroadcastPlayerUpdate()
+}
+
+func (lobby *Lobby) broadcastModeratorChanged(player *Player) {
+	promoterID := player.modPromoterID
+	if player.TemporaryModerator {
+		promoterID = player.tempModPromoterID
+	}
+	lobby.Broadcast(&Event{
+		Type: EventTypeModeratorChanged,
+		Data: &ModeratorChangedEvent{
+			PlayerID:           player.ID,
+			PlayerName:         player.Name,
+			Moderator:          player.Moderator,
+			TemporaryModerator: player.TemporaryModerator,
+			ActiveModerator:    player.ActiveModerator,
+			PromoterID:         promoterID,
+		},
+	})
+}
+
 func (lobby *Lobby) Drawer() *Player {
 	for _, player := range lobby.players {
 		if player.State == Drawing {
@@ -777,7 +984,11 @@ func isAlwaysVisibleHintCharacter(char rune) bool {
 }
 
 func (lobby *Lobby) calculateGuesserScore() int {
-	return lobby.calculateGuesserScoreAt(getTimeAsMillis(), lobby.hintsLeft)
+	guessTime := getTimeAsMillis()
+	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		guessTime = lobby.pauseStartedAt.UTC().UnixMilli()
+	}
+	return lobby.calculateGuesserScoreAt(guessTime, lobby.hintsLeft)
 }
 
 func (lobby *Lobby) calculateGuesserScoreAt(guessTimeMillis int64, hintsLeft int) int {
@@ -802,10 +1013,14 @@ func resetCurrentRoundGuessData(player *Player) {
 }
 
 func (lobby *Lobby) broadcastRoundTimeUpdated() {
+	now := getTimeAsMillis()
+	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		now = lobby.pauseStartedAt.UTC().UnixMilli()
+	}
 	lobby.Broadcast(&Event{
 		Type: EventTypeRoundTimeUpdated,
 		Data: &RoundTimeUpdated{
-			TimeLeft: int(max(0, lobby.roundEndTime-getTimeAsMillis())),
+			TimeLeft: int(max(0, lobby.roundEndTime-now)),
 		},
 	})
 }
@@ -1036,6 +1251,8 @@ func endCurrentGame(lobby *Lobby, previousWord string) {
 	lobby.CurrentWord = ""
 	lobby.roundStartTime = 0
 	lobby.roundEndTime = 0
+	lobby.paused = false
+	lobby.pauseStartedAt = time.Time{}
 
 	for _, player := range lobby.players {
 		player.SpectateToggleRequested = false
@@ -1148,6 +1365,10 @@ func (lobby *Lobby) tickLogic(expectedTicker *time.Ticker) bool {
 	// listening to is still valid. If not, we want to kill the outer routine.
 	if lobby.timeLeftTicker != expectedTicker {
 		return false
+	}
+
+	if lobby.paused {
+		return true
 	}
 
 	if lobby.shouldEndEarlyDueToDisconnectedDrawer() {
@@ -1334,6 +1555,9 @@ func (lobby *Lobby) selectWord(index int) error {
 	}
 
 	lobby.roundStartTime = getTimeAsMillis()
+	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		lobby.roundStartTime = lobby.pauseStartedAt.UTC().UnixMilli()
+	}
 	lobby.roundEndTime = lobby.roundStartTime + int64(lobby.DrawingTime)*1000
 	lobby.CurrentWord = lobby.wordChoice[index]
 	lobby.wordChoice = nil
@@ -1384,11 +1608,15 @@ func (lobby *Lobby) selectWord(index int) error {
 		}
 	}
 
+	timeLeft := int(lobby.roundEndTime - getTimeAsMillis())
+	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		timeLeft = int(lobby.roundEndTime - lobby.pauseStartedAt.UTC().UnixMilli())
+	}
 	wordHintData := &Event{
 		Type: EventTypeWordChosen,
 		Data: &WordChosen{
 			Hints:    lobby.wordHints,
-			TimeLeft: int(lobby.roundEndTime - getTimeAsMillis()),
+			TimeLeft: timeLeft,
 		},
 	}
 	lobby.broadcastConditional(wordHintData, IsAllowedToSeeHints)
@@ -1396,7 +1624,7 @@ func (lobby *Lobby) selectWord(index int) error {
 		Type: EventTypeWordChosen,
 		Data: &WordChosen{
 			Hints:    lobby.wordHintsShown,
-			TimeLeft: int(lobby.roundEndTime - getTimeAsMillis()),
+			TimeLeft: timeLeft,
 		},
 	}
 	lobby.broadcastConditional(wordHintDataRevealed, IsAllowedToSeeRevealedHints)
@@ -1474,6 +1702,8 @@ func generateReadyData(lobby *Lobby, player *Player) *ReadyEvent {
 		Rounds:             lobby.Rounds,
 		DrawingTimeSetting: lobby.DrawingTime,
 		HideScoresMidGame:  lobby.HideScoresMidGame,
+		Paused:             lobby.paused,
+		CanModerate:        lobby.CanModerate(player),
 		WordHints:          lobby.GetAvailableWordHints(player),
 		Players:            lobby.playersForClient(),
 		CurrentDrawing:     lobby.currentDrawing,
@@ -1482,6 +1712,14 @@ func generateReadyData(lobby *Lobby, player *Player) *ReadyEvent {
 	if lobby.State != Ongoing {
 		// Clients should interpret 0 as "time over", unless the gamestate isn't "ongoing"
 		ready.TimeLeft = 0
+	} else if lobby.CurrentWord == "" {
+		if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+			ready.TimeLeft = int(lobby.wordChoiceEndTime.UnixMilli() - lobby.pauseStartedAt.UTC().UnixMilli())
+		} else {
+			ready.TimeLeft = int(lobby.wordChoiceEndTime.UnixMilli() - getTimeAsMillis())
+		}
+	} else if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		ready.TimeLeft = int(lobby.roundEndTime - lobby.pauseStartedAt.UTC().UnixMilli())
 	} else {
 		ready.TimeLeft = int(lobby.roundEndTime - getTimeAsMillis())
 	}
@@ -1490,10 +1728,14 @@ func generateReadyData(lobby *Lobby, player *Player) *ReadyEvent {
 }
 
 func (lobby *Lobby) SendYourTurnEvent(player *Player) {
+	timeLeft := int(lobby.wordChoiceEndTime.UnixMilli() - getTimeAsMillis())
+	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
+		timeLeft = int(lobby.wordChoiceEndTime.UnixMilli() - lobby.pauseStartedAt.UTC().UnixMilli())
+	}
 	lobby.WriteObject(player, &Event{
 		Type: EventTypeYourTurn,
 		Data: &YourTurn{
-			TimeLeft:        int(lobby.wordChoiceEndTime.UnixMilli() - getTimeAsMillis()),
+			TimeLeft:        timeLeft,
 			PreSelectedWord: lobby.preSelectedWord,
 			Words:           lobby.wordChoice,
 		},
@@ -1503,6 +1745,7 @@ func (lobby *Lobby) SendYourTurnEvent(player *Player) {
 func (lobby *Lobby) OnPlayerConnectUnsynchronized(player *Player) {
 	player.Connected = true
 	player.hasConnectedOnce = true
+	lobby.refreshModeratorStateLocked()
 	recalculateRanks(lobby)
 	lobby.WriteObject(player, Event{Type: EventTypeReady, Data: generateReadyData(lobby, player)})
 
@@ -1544,6 +1787,8 @@ func (lobby *Lobby) OnPlayerDisconnect(player *Player) {
 			player.State = Standby
 		}
 	}
+
+	lobby.refreshModeratorStateLocked()
 
 	// Necessary to prevent gaps in the ranking. While players preserve their
 	// points when disconnecting, they shouldn't preserve their ranking. Upon

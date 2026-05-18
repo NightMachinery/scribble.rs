@@ -78,6 +78,8 @@ const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
 const toggleLandscapeButton = document.getElementById("toggle-landscape-button");
 const toggleSpectateButton = document.getElementById("toggle-spectate-button");
+const pauseGameButton = document.getElementById("pause-game-button");
+const pauseGameButtonLabel = document.getElementById("pause-game-button-label");
 const ownerForceEndGameButton = document.getElementById(
     "owner-force-end-game-button",
 );
@@ -487,15 +489,15 @@ function showKickDialog() {
 
     if (cachedPlayers && cachedPlayers) {
         kickDialogPlayers.innerHTML = "";
-        const isOwner = ownerID === ownID;
-        kickDialogTitle.innerText = isOwner
+        const canUseModeratorActions = canModerate;
+        kickDialogTitle.innerText = canUseModeratorActions
             ? '{{.Translation.Get "manage-players"}}'
             : '{{.Translation.Get "votekick-a-player"}}';
 
         cachedPlayers.forEach((player) => {
             //Don't wanna allow kicking ourselves.
             if (player.id !== ownID) {
-                if (isOwner) {
+                if (canUseModeratorActions && player.id !== ownerID) {
                     const playerRow = document.createElement("div");
                     playerRow.classList.add("kick-player-row");
 
@@ -540,6 +542,25 @@ function showKickDialog() {
                         playerActions.appendChild(spectateButton);
                     }
 
+                    if (player.moderator || player.temporaryModerator) {
+                        const demoteButton = document.createElement("button");
+                        demoteButton.classList.add("dialog-button");
+                        demoteButton.classList.add("kick-player-action-button");
+                        demoteButton.onclick = () => onDemoteModerator(player.id);
+                        demoteButton.innerText =
+                            '{{.Translation.Get "demote-moderator"}}';
+                        playerActions.appendChild(demoteButton);
+                    } else {
+                        const promoteButton = document.createElement("button");
+                        promoteButton.classList.add("dialog-button");
+                        promoteButton.classList.add("kick-player-action-button");
+                        promoteButton.onclick = () =>
+                            onPromoteModerator(player.id);
+                        promoteButton.innerText =
+                            '{{.Translation.Get "promote-moderator"}}';
+                        playerActions.appendChild(promoteButton);
+                    }
+
                     playerRow.replaceChildren(playerName, playerActions);
                     kickDialogPlayers.appendChild(playerRow);
                 } else {
@@ -554,7 +575,7 @@ function showKickDialog() {
         });
 
         ownerForceEndGameButton.style.display =
-            isOwner && gameState === "ongoing" ? "inline-block" : "none";
+            canUseModeratorActions && gameState === "ongoing" ? "inline-block" : "none";
 
         kickDialog.style.visibility = "visible";
     }
@@ -1381,6 +1402,36 @@ function onOwnerForceSpectatePlayer(playerId) {
     hideKickDialog();
 }
 
+function onPromoteModerator(playerId) {
+    socket.send(
+        JSON.stringify({
+            type: "promote-moderator",
+            data: playerId,
+        }),
+    );
+    hideKickDialog();
+}
+
+function onDemoteModerator(playerId) {
+    socket.send(
+        JSON.stringify({
+            type: "demote-moderator",
+            data: playerId,
+        }),
+    );
+    hideKickDialog();
+}
+
+function togglePauseGame() {
+    hideMenu();
+    socket.send(
+        JSON.stringify({
+            type: gamePaused ? "resume-game" : "pause-game",
+        }),
+    );
+}
+pauseGameButton.addEventListener("click", togglePauseGame);
+
 //This automatically scrolls down the chat on arrivals of new messages
 new MutationObserver(
     () => (messageContainer.scrollTop = messageContainer.scrollHeight),
@@ -1395,6 +1446,9 @@ let round = 0;
 let rounds = 0;
 let roundEndTime = 0;
 let gameState = "unstarted";
+let gamePaused = false;
+let canModerate = false;
+let pausedTimeLeftMs = 0;
 let drawingTimeSetting = "∞";
 let assignRandomNames = lobbySettingsAssignRandomNames.checked;
 let hideScoresMidGame = lobbySettingsHideScoresMidGame.checked;
@@ -1696,6 +1750,52 @@ const handleEvent = (parsed) => {
                 parsed.data.playerName,
             ),
         );
+    } else if (parsed.type === "moderator-changed") {
+        const player = getCachedPlayer(parsed.data.playerId);
+        if (player !== null) {
+            player.moderator = parsed.data.moderator;
+            player.temporaryModerator = parsed.data.temporaryModerator;
+            player.activeModerator = parsed.data.activeModerator;
+        }
+        if (parsed.data.playerId === ownID) {
+            canModerate =
+                ownerID === ownID ||
+                parsed.data.moderator ||
+                parsed.data.activeModerator;
+        }
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            (parsed.data.moderator || parsed.data.temporaryModerator
+                ? '{{.Translation.Get "moderator-promoted"}}'
+                : '{{.Translation.Get "moderator-demoted"}}'
+            ).format(parsed.data.playerName),
+        );
+        updateButtonVisibilities();
+        if (cachedPlayers) {
+            applyPlayers(cachedPlayers);
+        }
+    } else if (parsed.type === "game-paused") {
+        gamePaused = true;
+        pausedTimeLeftMs = Math.max(0, roundEndTime - Date.now());
+        updateButtonVisibilities();
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "game-paused-by"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
+    } else if (parsed.type === "game-resumed") {
+        gamePaused = false;
+        updateButtonVisibilities();
+        appendMessage(
+            "system-message",
+            '{{.Translation.Get "system"}}',
+            '{{.Translation.Get "game-resumed-by"}}'.format(
+                parsed.data.playerName,
+            ),
+        );
     } else if (parsed.type === "drawer-kicked") {
         appendMessage(
             "system-message",
@@ -1754,6 +1854,9 @@ const handleEvent = (parsed) => {
         );
     } else if (parsed.type === "round-time-updated") {
         setRoundTimeLeft(parsed.data.timeLeft);
+        if (gamePaused) {
+            pausedTimeLeftMs = parsed.data.timeLeft;
+        }
     } else if (parsed.type === "shutdown") {
         socket.onclose = null;
         socket.close();
@@ -1812,6 +1915,9 @@ function getCachedPlayer(playerID) {
 //account, however, that's no biggie for now.
 function setRoundTimeLeft(timeLeftMs) {
     roundEndTime = Date.now() + timeLeftMs;
+    if (gamePaused) {
+        pausedTimeLeftMs = timeLeftMs;
+    }
 }
 
 const handleReadyEvent = (ready) => {
@@ -1824,6 +1930,9 @@ const handleReadyEvent = (ready) => {
     round = ready.round;
     rounds = ready.rounds;
     gameState = ready.gameState;
+    gamePaused = ready.paused;
+    canModerate = ready.canModerate;
+    pausedTimeLeftMs = ready.paused ? ready.timeLeft : 0;
     drawingTimeSetting = ready.drawingTimeSetting;
     hideScoresMidGame = ready.hideScoresMidGame;
     lobbySettingsHideScoresMidGame.checked = hideScoresMidGame;
@@ -1849,7 +1958,7 @@ const handleReadyEvent = (ready) => {
 
     if (ready.gameState === "unstarted") {
         startDialog.style.visibility = "visible";
-        if (ownerID === ownID) {
+        if (canModerate) {
             forceStartButton.style.display = "block";
             waitingForOwnerStart.style.display = "none";
         } else {
@@ -1858,7 +1967,7 @@ const handleReadyEvent = (ready) => {
         }
     } else if (ready.gameState === "gameOver") {
         gameOverDialog.style.visibility = "visible";
-        if (ownerID === ownID) {
+        if (canModerate) {
             forceRestartButton.style.display = "block";
             waitingForOwnerRestart.style.display = "none";
         } else {
@@ -1950,8 +2059,7 @@ const handleReadyEvent = (ready) => {
 };
 
 function updateButtonVisibilities() {
-    const isOwner = ownerID === ownID;
-    if (ownerID === ownID) {
+    if (canModerate) {
         lobbySettingsButton.style.display = "flex";
     } else {
         lobbySettingsButton.style.display = "none";
@@ -1961,16 +2069,21 @@ function updateButtonVisibilities() {
         gameState === "ongoing" ? "none" : "inline-flex";
     copyLobbyLinkMenuButton.style.display =
         gameState === "ongoing" ? "flex" : "none";
+    pauseGameButton.style.display =
+        canModerate && gameState === "ongoing" ? "flex" : "none";
+    pauseGameButtonLabel.innerText = gamePaused
+        ? '{{.Translation.Get "resume-game"}}'
+        : '{{.Translation.Get "pause-game"}}';
 
-    kickButtonLabel.innerText = isOwner
+    kickButtonLabel.innerText = canModerate
         ? '{{.Translation.Get "manage-players"}}'
         : '{{.Translation.Get "votekick-a-player"}}';
-    kickButton.title = isOwner
+    kickButton.title = canModerate
         ? '{{.Translation.Get "manage-players"}}'
         : '{{.Translation.Get "votekick-a-player"}}';
     kickButton.setAttribute(
         "alt",
-        isOwner
+        canModerate
             ? '{{.Translation.Get "manage-players"}}'
             : '{{.Translation.Get "votekick-a-player"}}',
     );
@@ -2005,7 +2118,7 @@ function playWav(file) {
 
 window.setInterval(() => {
     if (gameState === "ongoing") {
-        const msLeft = roundEndTime - Date.now();
+        const msLeft = gamePaused ? pausedTimeLeftMs : roundEndTime - Date.now();
         const secondsLeft = Math.max(0, Math.floor(msLeft / 1000));
         timeLeftValue.innerText = "" + secondsLeft;
     } else {
@@ -2077,7 +2190,7 @@ function createObserverBadge() {
 }
 
 function createOwnerInlineActions(player, isObserver) {
-    if (ownerID !== ownID || player.id === ownID) {
+    if (!canModerate || player.id === ownID || player.id === ownerID) {
         return null;
     }
 
@@ -2100,6 +2213,17 @@ function createOwnerInlineActions(player, isObserver) {
             ? onOwnerForceParticipatePlayer(player.id)
             : onOwnerForceSpectatePlayer(player.id);
     actions.appendChild(modeAction);
+
+    const moderatorAction = document.createElement("button");
+    moderatorAction.classList.add("dialog-button", "player-inline-action");
+    if (player.moderator || player.temporaryModerator) {
+        moderatorAction.innerText = '{{.Translation.Get "demote-moderator"}}';
+        moderatorAction.onclick = () => onDemoteModerator(player.id);
+    } else {
+        moderatorAction.innerText = '{{.Translation.Get "promote-moderator"}}';
+        moderatorAction.onclick = () => onPromoteModerator(player.id);
+    }
+    actions.appendChild(moderatorAction);
 
     return actions;
 }
@@ -2156,6 +2280,23 @@ function createPlayerRow(player, matchOngoing, isObserver) {
     }
     playerDiv.appendChild(playernameSpan);
 
+    if (
+        player.id === ownerID ||
+        player.moderator ||
+        player.temporaryModerator ||
+        player.activeModerator
+    ) {
+        const moderatorBadge = document.createElement("span");
+        moderatorBadge.classList.add("player-observer-badge");
+        moderatorBadge.innerText =
+            player.id === ownerID
+                ? '{{.Translation.Get "creator-label"}}'
+                : player.temporaryModerator
+                  ? '{{.Translation.Get "temporary-moderator-label"}}'
+                  : '{{.Translation.Get "moderator-label"}}';
+        playerDiv.appendChild(moderatorBadge);
+    }
+
     const playerscoreSpan = document.createElement("span");
     playerscoreSpan.classList.add("playerscore");
     playerscoreSpan.innerText = isScoreHiddenNow() ? "" : player.score;
@@ -2198,10 +2339,12 @@ function applyPlayers(players) {
         }
 
         if (player.id === ownID) {
+            canModerate = ownerID === ownID || player.moderator || player.activeModerator;
             setSpectateMode(
                 player.spectateToggleRequested,
                 player.state === "spectating",
             );
+            updateButtonVisibilities();
         }
 
         const oldPlayer = getCachedPlayer(player.id);

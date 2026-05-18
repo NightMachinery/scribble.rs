@@ -1065,6 +1065,218 @@ func Test_handleKickVoteEventAllowsDisconnectedTarget(t *testing.T) {
 	require.Nil(t, lobby.GetPlayerByID(target.ID))
 }
 
+func TestCreatorCannotBeKickedAndOwnerDoesNotTransfer(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	creator.Connected = true
+	lobby.OwnerID = creator.ID
+
+	mod := lobby.JoinPlayer("mod")
+	mod.Connected = true
+	mod.Moderator = true
+	mod.ActiveModerator = true
+
+	handleOwnerKickEvent(lobby, mod, creator.ID)
+
+	require.Equal(t, creator, lobby.GetPlayerByID(creator.ID))
+	require.Equal(t, creator.ID, lobby.OwnerID)
+
+	kickPlayer(lobby, creator, 0)
+
+	require.Equal(t, creator, lobby.GetPlayerByID(creator.ID))
+	require.Equal(t, creator.ID, lobby.OwnerID)
+}
+
+func TestModeratorPromotionAndDemotionRules(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	creator.Connected = true
+	lobby.OwnerID = creator.ID
+
+	firstMod := lobby.JoinPlayer("first")
+	firstMod.Connected = true
+	handlePromoteModeratorEvent(lobby, creator, firstMod.ID)
+	require.True(t, firstMod.Moderator)
+
+	secondMod := lobby.JoinPlayer("second")
+	secondMod.Connected = true
+	handlePromoteModeratorEvent(lobby, firstMod, secondMod.ID)
+	require.True(t, secondMod.Moderator)
+	require.Equal(t, firstMod.ID, secondMod.modPromoterID)
+
+	thirdMod := lobby.JoinPlayer("third")
+	thirdMod.Connected = true
+	handlePromoteModeratorEvent(lobby, creator, thirdMod.ID)
+	require.True(t, thirdMod.Moderator)
+
+	handleDemoteModeratorEvent(lobby, firstMod, thirdMod.ID)
+	require.True(t, thirdMod.Moderator)
+
+	handleDemoteModeratorEvent(lobby, firstMod, secondMod.ID)
+	require.False(t, secondMod.Moderator)
+
+	handleDemoteModeratorEvent(lobby, firstMod, creator.ID)
+	require.Equal(t, creator.ID, lobby.OwnerID)
+}
+
+func TestTemporaryModeratorActivationReusesDesignatedTempMods(t *testing.T) {
+	oldDelay := tempModeratorActivationDelay
+	SetTempModeratorActivationDelay(time.Millisecond)
+	defer SetTempModeratorActivationDelay(oldDelay)
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	lobby.OwnerID = creator.ID
+	creator.Connected = false
+
+	tempMod := lobby.JoinPlayer("temp")
+	tempMod.Connected = true
+	tempMod.TemporaryModerator = true
+
+	lobby.mutex.Lock()
+	lobby.refreshModeratorStateLocked()
+	lobby.mutex.Unlock()
+
+	require.Eventually(t, func() bool {
+		lobby.mutex.Lock()
+		defer lobby.mutex.Unlock()
+		return tempMod.ActiveModerator
+	}, time.Second, 10*time.Millisecond)
+}
+
+func TestTemporaryModeratorPowersDisableWhenRealModConnects(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	lobby.OwnerID = creator.ID
+	creator.Connected = false
+
+	tempMod := lobby.JoinPlayer("temp")
+	tempMod.Connected = true
+	tempMod.TemporaryModerator = true
+	tempMod.ActiveModerator = true
+
+	realMod := lobby.JoinPlayer("real")
+	realMod.Moderator = true
+	realMod.Connected = true
+
+	lobby.refreshModeratorStateLocked()
+
+	require.False(t, tempMod.ActiveModerator)
+	require.True(t, tempMod.TemporaryModerator)
+	require.True(t, realMod.ActiveModerator)
+}
+
+func TestActiveTemporaryModeratorPromotesTemporaryModerators(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			AssignRandomNames: true,
+		},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	lobby.OwnerID = creator.ID
+	creator.Connected = false
+
+	tempMod := lobby.JoinPlayer("temp")
+	tempMod.Connected = true
+	tempMod.TemporaryModerator = true
+	tempMod.ActiveModerator = true
+
+	target := lobby.JoinPlayer("target")
+	target.Connected = true
+
+	handlePromoteModeratorEvent(lobby, tempMod, target.ID)
+
+	require.False(t, target.Moderator)
+	require.True(t, target.TemporaryModerator)
+	require.True(t, target.ActiveModerator)
+	require.Equal(t, tempMod.ID, target.tempModPromoterID)
+}
+
+func TestPauseFreezesTickLogicAndResumeShiftsTimers(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       120,
+			AssignRandomNames: true,
+		},
+		State:             Ongoing,
+		ScoreCalculation:  ChillScoring,
+		wordChoiceEndTime: now.Add(-time.Second),
+		roundStartTime:    now.UnixMilli(),
+		roundEndTime:      now.Add(time.Minute).UnixMilli(),
+		paused:            true,
+		pauseStartedAt:    now.Add(-10 * time.Second),
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	creator := lobby.JoinPlayer("creator")
+	creator.Connected = true
+	lobby.OwnerID = creator.ID
+	drawer := lobby.JoinPlayer("drawer")
+	drawer.Connected = true
+	drawer.State = Drawing
+	guesser := lobby.JoinPlayer("guesser")
+	guesser.Connected = true
+	guesser.currentRoundGuessTime = now.Add(-30 * time.Second).UnixMilli()
+
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	lobby.timeLeftTicker = ticker
+
+	require.True(t, lobby.tickLogic(ticker))
+	require.Empty(t, lobby.CurrentWord)
+
+	oldRoundEnd := lobby.roundEndTime
+	oldGuessTime := guesser.currentRoundGuessTime
+	handleResumeGameEvent(lobby, creator)
+
+	require.False(t, lobby.paused)
+	require.GreaterOrEqual(t, lobby.roundEndTime-oldRoundEnd, int64(9_000))
+	require.GreaterOrEqual(t, guesser.currentRoundGuessTime-oldGuessTime, int64(9_000))
+}
+
 func TestApplyDrawingTimeUpdatesCurrentTurnScoresAndHints(t *testing.T) {
 	t.Parallel()
 

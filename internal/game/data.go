@@ -44,8 +44,8 @@ type Lobby struct {
 
 	// Whether the game has started, is ongoing or already over.
 	State State
-	// OwnerID references the Player that currently owns the lobby.
-	// Meaning this player has rights to restart or change certain settings.
+	// OwnerID references the Player that created the lobby.
+	// This creator role is permanent and does not transfer.
 	OwnerID uuid.UUID
 	// ScoreCalculation decides how scores for both guessers and drawers are
 	// determined.
@@ -75,8 +75,11 @@ type Lobby struct {
 	roundStartTime int64
 	roundEndTime   int64
 	roundEndReason roundEndReason
+	paused         bool
+	pauseStartedAt time.Time
 
-	timeLeftTicker *time.Ticker
+	timeLeftTicker         *time.Ticker
+	tempModActivationTimer *time.Timer
 	// currentDrawing represents the state of the current canvas. The elements
 	// consist of LineEvent and FillEvent. Please do not modify the contents
 	// of this array an only move AppendLine and AppendFill on the respective
@@ -228,6 +231,43 @@ func (lobby *Lobby) GetPlayerByRoomAuthID(roomAuthID uuid.UUID) *Player {
 
 func (lobby *Lobby) GetOwner() *Player {
 	return lobby.GetPlayerByID(lobby.OwnerID)
+}
+
+func (lobby *Lobby) IsCreator(player *Player) bool {
+	return player != nil && player.ID == lobby.OwnerID
+}
+
+func (lobby *Lobby) hasConnectedRealModerator() bool {
+	for _, player := range lobby.players {
+		if player.Connected && (lobby.IsCreator(player) || player.Moderator) {
+			return true
+		}
+	}
+	return false
+}
+
+func (lobby *Lobby) CanModerate(player *Player) bool {
+	return player != nil && (lobby.IsCreator(player) || player.Moderator || player.ActiveModerator)
+}
+
+func (lobby *Lobby) CanManageLobbySettings(player *Player) bool {
+	return lobby.CanModerate(player)
+}
+
+func (lobby *Lobby) canDemoteModerator(actor, target *Player) bool {
+	if actor == nil || target == nil || actor.ID == target.ID || lobby.IsCreator(target) {
+		return false
+	}
+	if lobby.IsCreator(actor) {
+		return target.Moderator || target.TemporaryModerator
+	}
+	if actor.Moderator && target.Moderator && target.modPromoterID == actor.ID {
+		return true
+	}
+	if actor.ActiveModerator && actor.TemporaryModerator && target.TemporaryModerator && target.tempModPromoterID == actor.ID {
+		return true
+	}
+	return false
 }
 
 func (lobby *Lobby) ClearDrawing() {

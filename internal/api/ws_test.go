@@ -389,6 +389,55 @@ func TestPatchLobbyAllowsOwnerViaRoomAuth(t *testing.T) {
 	require.Equal(t, 150, lobby.DrawingTime)
 }
 
+func TestPatchLobbyAllowsModerator(t *testing.T) {
+	t.Parallel()
+
+	handler := NewHandler(&config.Default)
+	creator, lobby, err := game.CreateLobby("", "creator", "english", &game.EditableLobbySettings{
+		Public:             false,
+		DrawingTime:        120,
+		Rounds:             4,
+		MaxPlayers:         8,
+		CustomWordsPerTurn: 3,
+		ClientsPerIPLimit:  1,
+		WordsPerTurn:       3,
+	}, nil, game.ChillScoring)
+	require.NoError(t, err)
+	lobby.WriteObject = WriteObject
+	lobby.WritePreparedMessage = WritePreparedMessage
+
+	moderator := lobby.JoinPlayer("moderator")
+	moderator.Moderator = true
+	moderator.ActiveModerator = true
+
+	state.AddLobby(lobby)
+	defer state.RemoveLobby(lobby.LobbyID)
+
+	request := httptest.NewRequest(http.MethodPatch,
+		"/v1/lobby?drawing_time=150"+
+			"&rounds=4"+
+			"&max_players=8"+
+			"&custom_words_per_turn=3"+
+			"&clients_per_ip_limit=1"+
+			"&public=false"+
+			"&words_per_turn=3"+
+			"&assign_random_names=false"+
+			"&hide_scores_mid_game=false"+
+			"&clear_password=false",
+		nil)
+	request.AddCookie(&http.Cookie{Name: "lobby-id", Value: lobby.LobbyID})
+	request.AddCookie(&http.Cookie{Name: "usersession", Value: moderator.GetUserSession().String()})
+	recorder := httptest.NewRecorder()
+
+	require.NotEqual(t, creator.ID, moderator.ID)
+	handler.patchLobby(recorder, request)
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Equal(t, 150, lobby.DrawingTime)
+}
+
 func TestWebsocketCanReconnectWithRoomAuth(t *testing.T) {
 	t.Parallel()
 

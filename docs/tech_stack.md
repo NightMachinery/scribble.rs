@@ -21,7 +21,9 @@ This document gives a high-level map of the Scribble.rs codebase and the main te
   - global lobby registry protected by an RW mutex (`internal/state/lobbies.go`)
   - each lobby has its own mutex for game-state mutation (`internal/game/data.go`)
   - each active turn uses a per-lobby ticker goroutine for round timing and hint reveal logic (`internal/game/lobby.go`)
-  - owner lobby-setting changes can retime an already active round and push immediate timer resync events (`internal/api/v1.go`, `internal/game/lobby.go`)
+  - moderator lobby-setting changes can retime an already active round and push immediate timer resync events (`internal/api/v1.go`, `internal/game/lobby.go`)
+  - paused lobbies keep the ticker alive but skip timer progression until a moderator resumes the game (`internal/game/lobby.go`)
+  - temporary moderator activation uses a per-lobby timeout when no creator or permanent moderator is connected (`internal/game/lobby.go`)
   - WebSocket read loops run per connection (`internal/api/ws.go`)
 
 ## Major packages / modules
