@@ -102,6 +102,13 @@
                                         class="header-button-image" />
                                     {{.Translation.Get "copy-lobby-link"}}
                                 </button>
+                                <button id="migrate-device-button" class="dialog-button menu-item header-button"
+                                    alt="{{.Translation.Get "migrate-device"}}"
+                                    title="{{.Translation.Get "migrate-device"}}">
+                                    <img src='{{.RootPath}}/resources/{{.WithCacheBust "user.svg"}}'
+                                        class="header-button-image" />
+                                    {{.Translation.Get "migrate-device"}}
+                                </button>
                                 <button id="kick-button" class="dialog-button menu-item header-button"
                                     alt="{{.Translation.Get "votekick-a-player"}}"
                                     title="{{.Translation.Get "votekick-a-player"}}">

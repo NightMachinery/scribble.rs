@@ -17,6 +17,10 @@ game, and live lobby settings include round time and optional hidden mid-game
 scores. When scores are hidden, the in-game player list is alphabetical until
 the final leaderboard reveals the real scores.
 
+Players can use the in-room **Migrate device** button to copy a room-specific
+link for continuing as the same player on another device without exposing the
+underlying browser identity.
+
 ## Play now
 
 There are some community hosted versions of the game (feel free to host your own instance and add it here!):

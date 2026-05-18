@@ -26,6 +26,8 @@ func (handler *V1Handler) SetupRoutes(rootPath string, register func(string, str
 	// We support both path parameter and cookie.
 	register("PATCH", path.Join(v1, "lobby"), handler.patchLobby)
 
+	register("POST", path.Join(v1, "lobby", "{lobby_id}", "room-auth"), handler.postRoomAuth)
+
 	// The websocket is shared between the public API and the official client
 	register("GET", path.Join(v1, "lobby", "{lobby_id}", "ws"), handler.websocketUpgrade)
 	// We support both path parameter and cookie.

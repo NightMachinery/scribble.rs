@@ -173,3 +173,81 @@ func TestShouldAttemptClientIDRestoreStopsAfterQueryParam(t *testing.T) {
 
 	require.False(t, shouldAttemptClientIDRestore(request))
 }
+
+func TestLobbyPageIncludesMigrateDeviceButton(t *testing.T) {
+	t.Parallel()
+
+	handler, err := NewHandler(&config.Default)
+	require.NoError(t, err)
+
+	player, lobby, err := game.CreateLobby("", "player", "english", &game.EditableLobbySettings{
+		Public:             false,
+		DrawingTime:        120,
+		Rounds:             4,
+		MaxPlayers:         8,
+		CustomWordsPerTurn: 3,
+		ClientsPerIPLimit:  2,
+		WordsPerTurn:       3,
+	}, nil, game.ChillScoring)
+	require.NoError(t, err)
+
+	state.AddLobby(lobby)
+	t.Cleanup(func() {
+		state.RemoveLobby(lobby.LobbyID)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/lobby/"+lobby.LobbyID, nil)
+	request.SetPathValue("lobby_id", lobby.LobbyID)
+	request.Header.Set("User-Agent", "Mozilla/5.0 Chrome/123.0")
+	request.AddCookie(&http.Cookie{Name: "usersession", Value: player.GetUserSession().String()})
+
+	recorder := httptest.NewRecorder()
+	handler.ssrEnterLobby(recorder, request)
+
+	response := recorder.Result()
+	body := recorder.Body.String()
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Contains(t, body, `id="migrate-device-button"`)
+	require.Contains(t, body, "Migrate device")
+}
+
+func TestEnterLobbyWithRoomAuthDoesNotSetIdentityCookies(t *testing.T) {
+	t.Parallel()
+
+	handler, err := NewHandler(&config.Default)
+	require.NoError(t, err)
+
+	player, lobby, err := game.CreateLobby("", "player", "english", &game.EditableLobbySettings{
+		Public:             false,
+		DrawingTime:        120,
+		Rounds:             4,
+		MaxPlayers:         8,
+		CustomWordsPerTurn: 3,
+		ClientsPerIPLimit:  2,
+		WordsPerTurn:       3,
+	}, nil, game.ChillScoring)
+	require.NoError(t, err)
+
+	state.AddLobby(lobby)
+	t.Cleanup(func() {
+		state.RemoveLobby(lobby.LobbyID)
+	})
+
+	request := httptest.NewRequest(http.MethodGet,
+		"/lobby/"+lobby.LobbyID+"?room_auth="+player.GetRoomAuthID().String(), nil)
+	request.SetPathValue("lobby_id", lobby.LobbyID)
+	request.Header.Set("User-Agent", "Mozilla/5.0 Chrome/123.0")
+
+	recorder := httptest.NewRecorder()
+	handler.ssrEnterLobby(recorder, request)
+
+	response := recorder.Result()
+	defer response.Body.Close()
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	for _, cookie := range response.Cookies() {
+		require.NotEqual(t, "usersession", cookie.Name)
+		require.NotEqual(t, "client-id", cookie.Name)
+	}
+}

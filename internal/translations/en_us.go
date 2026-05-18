@@ -50,6 +50,9 @@ func initEnglishTranslation() *Translation {
 	translation.put("copy-lobby-link", "Copy lobby link")
 	translation.put("copied-lobby-link-title", "Lobby link copied")
 	translation.put("copied-lobby-link-text", "The lobby link has been copied to your clipboard.")
+	translation.put("migrate-device", "Migrate device")
+	translation.put("copied-migrate-link-title", "Migration link copied")
+	translation.put("copied-migrate-link-text", "Open this link on another device to use your identity in this room.")
 
 	translation.put("last-turn", "(Last turn: %s)")
 

@@ -152,6 +152,16 @@ func (player *Player) GetUserSession() uuid.UUID {
 	return player.userSession
 }
 
+// GetRoomAuthID returns the player's room-scoped migration identity,
+// generating it if necessary.
+func (player *Player) GetRoomAuthID() uuid.UUID {
+	if player.roomAuthID == uuid.Nil {
+		player.roomAuthID = uuid.Must(uuid.NewV4())
+	}
+
+	return player.roomAuthID
+}
+
 // GetClientID returns the players stable browser identity.
 func (player *Player) GetClientID() uuid.UUID {
 	return player.clientID
@@ -195,6 +205,20 @@ func (lobby *Lobby) GetPlayerBySession(userSession uuid.UUID) *Player {
 func (lobby *Lobby) GetPlayerByClientID(clientID uuid.UUID) *Player {
 	for _, player := range lobby.players {
 		if player.clientID == clientID {
+			return player
+		}
+	}
+
+	return nil
+}
+
+func (lobby *Lobby) GetPlayerByRoomAuthID(roomAuthID uuid.UUID) *Player {
+	if roomAuthID == uuid.Nil {
+		return nil
+	}
+
+	for _, player := range lobby.players {
+		if player.roomAuthID == roomAuthID {
 			return player
 		}
 	}

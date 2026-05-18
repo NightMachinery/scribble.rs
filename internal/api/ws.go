@@ -38,11 +38,16 @@ func (handler *V1Handler) websocketUpgrade(writer http.ResponseWriter, request *
 		log.Printf("error getting client id: %v", clientIDErr)
 		clientID = uuid.Nil
 	}
+	roomAuthID, roomAuthErr := GetRoomAuthID(request)
+	if roomAuthErr != nil {
+		log.Printf("error getting room auth id: %v", roomAuthErr)
+		roomAuthID = uuid.Nil
+	}
 
-	if userSession == uuid.Nil && clientID == uuid.Nil {
+	if userSession == uuid.Nil && clientID == uuid.Nil && roomAuthID == uuid.Nil {
 		// This issue can happen if you illegally request a websocket
-		// connection without ever having had a usersession or client-id or your
-		// client having deleted the identity cookies.
+		// connection without ever having had a usersession, client-id, or
+		// room-specific auth id.
 		http.Error(writer, "you don't have access to this lobby;player identity not set", http.StatusUnauthorized)
 		return
 	}

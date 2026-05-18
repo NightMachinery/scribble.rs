@@ -73,6 +73,7 @@ const copyLobbyLinkHeaderButton = document.getElementById(
 const copyLobbyLinkMenuButton = document.getElementById(
     "copy-lobby-link-menu-button",
 );
+const migrateDeviceButton = document.getElementById("migrate-device-button");
 const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
 const toggleLandscapeButton = document.getElementById("toggle-landscape-button");
@@ -323,6 +324,37 @@ function currentLobbyURL() {
     return url.toString();
 }
 
+function currentLobbyID() {
+    const segments = window.location.pathname.split("/").filter(Boolean);
+    const lobbySegmentIndex = segments.indexOf("lobby");
+    if (
+        lobbySegmentIndex === -1 ||
+        lobbySegmentIndex + 1 >= segments.length
+    ) {
+        return "";
+    }
+
+    return decodeURIComponent(segments[lobbySegmentIndex + 1]);
+}
+
+function currentRoomAuthID() {
+    return new URL(window.location.href).searchParams.get("room_auth");
+}
+
+function appendRoomAuth(url) {
+    const roomAuthID = currentRoomAuthID();
+    if (roomAuthID) {
+        url.searchParams.set("room_auth", roomAuthID);
+    }
+    return url;
+}
+
+function currentMigrationURL(roomAuthID) {
+    const url = new URL(currentLobbyURL());
+    url.searchParams.set("room_auth", roomAuthID);
+    return url.toString();
+}
+
 function showCopyLobbyLinkFallback(link) {
     closeDialog("copy-lobby-link-dialog");
 
@@ -400,6 +432,55 @@ async function copyLobbyLink() {
 }
 copyLobbyLinkHeaderButton.addEventListener("click", copyLobbyLink);
 copyLobbyLinkMenuButton.addEventListener("click", copyLobbyLink);
+
+async function copyMigrationLink() {
+    hideMenu();
+
+    const lobbyID = currentLobbyID();
+    if (!lobbyID) {
+        showInfoDialog(
+            '{{.Translation.Get "error-connecting"}}',
+            '{{.Translation.Get "error-connecting-text"}}',
+            '{{.Translation.Get "confirm"}}',
+        );
+        return;
+    }
+
+    try {
+        const requestURL = appendRoomAuth(
+            new URL(
+                `${rootPath}/v1/lobby/${encodeURIComponent(lobbyID)}/room-auth`,
+                window.location.href,
+            ),
+        );
+        const response = await fetch(requestURL.toString(), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        const data = await response.json();
+        const migrationURL = currentMigrationURL(data.roomAuthId);
+        const copied = await copyTextToClipboard(migrationURL);
+        if (copied) {
+            showInfoDialog(
+                '{{.Translation.Get "copied-migrate-link-title"}}',
+                '{{.Translation.Get "copied-migrate-link-text"}}',
+                '{{.Translation.Get "confirm"}}',
+            );
+        } else {
+            showCopyLobbyLinkFallback(migrationURL);
+        }
+    } catch (_error) {
+        showInfoDialog(
+            '{{.Translation.Get "error-connecting"}}',
+            '{{.Translation.Get "error-connecting-text"}}',
+            '{{.Translation.Get "confirm"}}',
+        );
+    }
+}
+migrateDeviceButton.addEventListener("click", copyMigrationLink);
 
 function showKickDialog() {
     hideMenu();
@@ -685,35 +766,42 @@ function updateLobbySettingsForm(settings) {
 }
 
 function saveLobbySettings() {
+    const requestURL = appendRoomAuth(
+        new URL(`${rootPath}/v1/lobby`, window.location.href),
+    );
+    const params = new URLSearchParams({
+        drawing_time: document.getElementById(
+            "lobby-settings-drawing-time",
+        ).value,
+        allowed_edit_distance_percent:
+            lobbySettingsAllowedEditDistancePercent.value,
+        rounds: document.getElementById("lobby-settings-max-rounds")
+            .value,
+        public: document.getElementById("lobby-settings-public")
+            .checked,
+        max_players: document.getElementById(
+            "lobby-settings-max-players",
+        ).value,
+        clients_per_ip_limit: document.getElementById(
+            "lobby-settings-clients-per-ip-limit",
+        ).value,
+        assign_random_names: lobbySettingsAssignRandomNames.checked,
+        hide_scores_mid_game: lobbySettingsHideScoresMidGame.checked,
+        custom_words_per_turn: document.getElementById(
+            "lobby-settings-custom-words-per-turn",
+        ).value,
+        words_per_turn: document.getElementById(
+            "lobby-settings-words-per-turn",
+        ).value,
+        password: lobbySettingsPassword.value,
+        clear_password: lobbySettingsClearPassword.checked,
+    });
+    for (const [key, value] of params) {
+        requestURL.searchParams.set(key, value);
+    }
+
     fetch(
-        `${rootPath}/v1/lobby?` +
-            new URLSearchParams({
-                drawing_time: document.getElementById(
-                    "lobby-settings-drawing-time",
-                ).value,
-                allowed_edit_distance_percent:
-                    lobbySettingsAllowedEditDistancePercent.value,
-                rounds: document.getElementById("lobby-settings-max-rounds")
-                    .value,
-                public: document.getElementById("lobby-settings-public")
-                    .checked,
-                max_players: document.getElementById(
-                    "lobby-settings-max-players",
-                ).value,
-                clients_per_ip_limit: document.getElementById(
-                    "lobby-settings-clients-per-ip-limit",
-                ).value,
-                assign_random_names: lobbySettingsAssignRandomNames.checked,
-                hide_scores_mid_game: lobbySettingsHideScoresMidGame.checked,
-                custom_words_per_turn: document.getElementById(
-                    "lobby-settings-custom-words-per-turn",
-                ).value,
-                words_per_turn: document.getElementById(
-                    "lobby-settings-words-per-turn",
-                ).value,
-                password: lobbySettingsPassword.value,
-                clear_password: lobbySettingsClearPassword.checked,
-            }),
+        requestURL.toString(),
         {
             method: "PATCH",
         },
@@ -2690,7 +2778,12 @@ const connectToWebsocket = () => {
     restoreClientIdCookieFromLocalStorage();
     socketIsConnecting = true;
 
-    const nextSocket = new WebSocket(`${rootPath}/v1/lobby/ws`);
+    let websocketURL = `${rootPath}/v1/lobby/ws`;
+    const roomAuthID = currentRoomAuthID();
+    if (roomAuthID) {
+        websocketURL += `?room_auth=${encodeURIComponent(roomAuthID)}`;
+    }
+    const nextSocket = new WebSocket(websocketURL);
     socket = nextSocket;
 
     nextSocket.onerror = (error) => {

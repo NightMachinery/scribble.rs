@@ -211,7 +211,9 @@ func (handler *SSRHandler) joinLobbyNoChecks(
 			}
 		} else {
 			player.SetLastKnownAddress(requestAddress)
-			api.SetGameplayCookies(writer, request, player, lobby)
+			if !api.HasRoomAuthID(request) {
+				api.SetGameplayCookies(writer, request, player, lobby)
+			}
 		}
 
 		pageData = &lobbyPageData{

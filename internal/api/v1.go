@@ -64,6 +64,10 @@ type LobbyEntry struct {
 	CustomWords     bool       `json:"customWords"`
 }
 
+type roomAuthData struct {
+	RoomAuthID uuid.UUID `json:"roomAuthId"`
+}
+
 func (handler *V1Handler) getLobbies(writer http.ResponseWriter, _ *http.Request) {
 	// REMARK: If paging is ever implemented, we might want to maintain order
 	// when deleting lobbies from state in the state package.
@@ -304,7 +308,9 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 			}
 		} else {
 			player.SetLastKnownAddress(GetIPAddressFromRequest(request))
-			SetGameplayCookies(writer, request, player, lobby)
+			if !HasRoomAuthID(request) {
+				SetGameplayCookies(writer, request, player, lobby)
+			}
 		}
 
 		lobbyData = CreateLobbyData(handler.cfg, lobby)
@@ -312,6 +318,36 @@ func (handler *V1Handler) postPlayer(writer http.ResponseWriter, request *http.R
 
 	if lobbyData != nil {
 		if started, err := marshalToHTTPWriter(lobbyData, writer); err != nil {
+			if !started {
+				http.Error(writer, err.Error(), http.StatusInternalServerError)
+			}
+			return
+		}
+	}
+}
+
+func (handler *V1Handler) postRoomAuth(writer http.ResponseWriter, request *http.Request) {
+	lobby := state.GetLobby(request.PathValue("lobby_id"))
+	if lobby == nil {
+		http.Error(writer, ErrLobbyNotExistent.Error(), http.StatusNotFound)
+		return
+	}
+
+	var response *roomAuthData
+	lobby.Synchronized(func() {
+		player := GetPlayer(lobby, request)
+		if player == nil {
+			http.Error(writer, "you don't have access to this lobby;player identity unknown", http.StatusUnauthorized)
+			return
+		}
+
+		response = &roomAuthData{
+			RoomAuthID: player.GetRoomAuthID(),
+		}
+	})
+
+	if response != nil {
+		if started, err := marshalToHTTPWriter(response, writer); err != nil {
 			if !started {
 				http.Error(writer, err.Error(), http.StatusInternalServerError)
 			}
@@ -425,21 +461,15 @@ func SetGameplayCookies(
 }
 
 func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.Request) {
-	userSession, err := GetUserSession(request)
-	if err != nil {
-		log.Printf("error getting user session: %v", err)
-		http.Error(writer, "no valid usersession supplied", http.StatusBadRequest)
-		return
-	}
-
-	if userSession == uuid.Nil {
-		http.Error(writer, "no usersession supplied", http.StatusBadRequest)
-		return
-	}
-
 	lobby := state.GetLobby(GetLobbyId(request))
 	if lobby == nil {
 		http.Error(writer, ErrLobbyNotExistent.Error(), http.StatusNotFound)
+		return
+	}
+
+	caller := GetPlayer(lobby, request)
+	if caller == nil {
+		http.Error(writer, "no valid player identity supplied", http.StatusBadRequest)
 		return
 	}
 
@@ -484,7 +514,7 @@ func (handler *V1Handler) patchLobby(writer http.ResponseWriter, request *http.R
 	}
 
 	owner := lobby.GetOwner()
-	if owner == nil || owner.GetUserSession() != userSession {
+	if owner == nil || owner.ID != caller.ID {
 		http.Error(writer, "only the lobby owner can edit the lobby", http.StatusForbidden)
 		return
 	}
@@ -678,9 +708,39 @@ func GetClientID(request *http.Request) (uuid.UUID, error) {
 	return id, nil
 }
 
+// GetRoomAuthID accesses the room-scoped migration identity from an HTTP request.
+func GetRoomAuthID(request *http.Request) (uuid.UUID, error) {
+	roomAuthID := request.URL.Query().Get("room_auth")
+	if roomAuthID == "" {
+		return uuid.Nil, nil
+	}
+
+	id, err := uuid.FromString(roomAuthID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("error parsing room auth id: %w", err)
+	}
+
+	return id, nil
+}
+
+func HasRoomAuthID(request *http.Request) bool {
+	return request.URL.Query().Get("room_auth") != ""
+}
+
 // GetPlayer returns the player object that matches the usersession in the
 // supplied HTTP request and lobby. If no user session is set, we return nil.
 func GetPlayer(lobby *game.Lobby, request *http.Request) *game.Player {
+	roomAuthIDRaw := request.URL.Query().Get("room_auth")
+	if roomAuthIDRaw != "" {
+		roomAuthID, err := GetRoomAuthID(request)
+		if err != nil {
+			log.Printf("error getting room auth id: %v", err)
+			return nil
+		}
+
+		return lobby.GetPlayerByRoomAuthID(roomAuthID)
+	}
+
 	userSession, err := GetUserSession(request)
 	if err != nil {
 		log.Printf("error getting user session: %v", err)
