@@ -161,8 +161,9 @@ func registerWordpackFiles(wordpackDataByName map[string]WordpackData, fileSyste
 }
 
 func knownWordpackForFile(fileName string) (string, WordpackData, bool) {
+	fileWordpackName := wordpackNameForFile(fileName)
 	for wordpackName, wordpackData := range knownWordpackData {
-		if wordpackData.FileName == fileName {
+		if wordpackData.FileName == fileName || wordpackName == fileWordpackName {
 			return wordpackName, wordpackData, true
 		}
 	}
