@@ -12,6 +12,8 @@ playground/
 .DS_Store
 # Configuration files
 .env
+# Runtime identity store
+data/
 # Anything temporary
 *.tmp
 # Profiling results
