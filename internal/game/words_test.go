@@ -3,10 +3,13 @@ package game
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/scribble-rs/scribble.rs/wordpacks"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -17,12 +20,46 @@ func Test_wordListsContainNoCarriageReturns(t *testing.T) {
 
 	for _, entry := range WordpackDataByName {
 		fileName := entry.FileName
-		fileBytes, err := wordFS.ReadFile("words/" + fileName)
+		fileBytes, err := wordpacks.Files.ReadFile(fileName)
 		if err != nil {
 			t.Errorf("wordpack file '%s' could not be read: %s", fileName, err)
 		} else if bytes.ContainsRune(fileBytes, '\r') {
 			t.Errorf("wordpack file '%s' contains a carriage return", fileName)
 		}
+	}
+}
+
+func Test_loadWordpacksFromDirectory(t *testing.T) {
+	t.Parallel()
+
+	wordpackDataByName := map[string]WordpackData{}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "test_pack.txt"), []byte("first\nsecond\n"), 0o600); err != nil {
+		t.Fatalf("error writing test wordpack: %s", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "en_us"), []byte("apple\n"), 0o600); err != nil {
+		t.Fatalf("error writing known wordpack: %s", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignored.go"), []byte("package ignored\n"), 0o600); err != nil {
+		t.Fatalf("error writing ignored file: %s", err)
+	}
+
+	if err := registerWordpackFiles(wordpackDataByName, os.DirFS(dir), "."); err != nil {
+		t.Fatalf("registerWordpackFiles() error = %v", err)
+	}
+
+	wordpackData, ok := wordpackDataByName["test_pack"]
+	if !ok {
+		t.Fatal("expected test_pack wordpack to be registered")
+	}
+	if wordpackData.FileName != "test_pack.txt" {
+		t.Errorf("FileName = %q, want %q", wordpackData.FileName, "test_pack.txt")
+	}
+	if _, ok := wordpackDataByName["english"]; !ok {
+		t.Fatal("expected en_us file to be registered as english")
+	}
+	if _, ok := wordpackDataByName["ignored.go"]; ok {
+		t.Fatal("expected .go source file to be ignored")
 	}
 }
 
@@ -45,6 +82,25 @@ func Test_readWordList(t *testing.T) {
 			testWordList(t, wordpack)
 		})
 	}
+}
+
+func Test_readWordListInternalUsesNewlines(t *testing.T) {
+	t.Parallel()
+
+	words, err := readWordListInternal(
+		cases.Lower(language.English),
+		"english",
+		func(string) (string, error) {
+			return "One fish, two fish\nBlue fish\n", nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("readWordListInternal() error = %v", err)
+	}
+
+	assert.Len(t, words, 2)
+	assert.Contains(t, words, "one fish, two fish")
+	assert.Contains(t, words, "blue fish")
 }
 
 func testWordList(t *testing.T, chosenWordpack string) {

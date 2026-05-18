@@ -4,7 +4,7 @@ This document gives a high-level map of the Scribble.rs codebase and the main te
 
 ## System shape
 
-- **Single-process Go web application**: one binary serves the HTTP API, WebSocket API, SSR pages, JS, CSS, images, sounds, and embedded word lists (`cmd/scribblers/main.go`, `internal/frontend/http.go`, `internal/game/words.go`).
+- **Single-process Go web application**: one binary serves the HTTP API, WebSocket API, SSR pages, JS, CSS, images, sounds, and embedded word lists (`cmd/scribblers/main.go`, `internal/frontend/http.go`, `internal/game/words.go`, `wordpacks/`).
 - **No database / no external state store**: active lobbies and drawing state live in memory only (`internal/state/lobbies.go`, `internal/game/data.go`). Restarting the process drops live games.
 - **Server-authoritative game logic**: game state transitions, turn timing, scoring, hint reveals, kick votes, drawing validation, and word choice all run on the server (`internal/game/lobby.go`, `internal/game/shared.go`).
 
@@ -199,7 +199,7 @@ Fed by `-ldflags` in CI/builds.
 
 ## Built-in content and localization
 
-- **Word packs** are embedded from `internal/game/words/*` and selected per lobby (`internal/game/words.go`)
+- **Word packs** are newline-separated text files in `wordpacks/`. Built-ins are embedded into the binary, and runtime files from `./wordpacks/` are auto-loaded as selectable wordpacks (`internal/game/words.go`).
 - **Supported UI/game languages** are registered in code (`internal/game/lobby.go`, `internal/translations/*.go`)
 - **RTL support** exists for languages such as Arabic, Hebrew, and Persian (`internal/game/words.go`, `internal/translations/translations.go`)
 

@@ -7,6 +7,8 @@
 !internal/
 !pkg/
 !cmd/
+!wordpacks/
+!wordpacks/**
 **_test.go
 
 # Go Modules
@@ -20,4 +22,3 @@
 !windows.Dockerfile
 
 !public
-

@@ -53,6 +53,10 @@ You can donate via Ko-Fi: https://ko-fi.com/biosmarcel
 Configuration is read from environment variables or a `.env` file located in
 the working directory.
 
+Wordpacks are UTF-8 text files in `./wordpacks/` with one word or phrase per
+line. Built-in wordpacks are embedded into the binary, and additional runtime
+files in that directory are auto-loaded as selectable wordpacks.
+
 Available settings:
 
 | Key                                       | Description                                                      | Default | Required |

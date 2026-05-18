@@ -26,22 +26,7 @@ var SupportedScoreCalculations = []string{
 	"competitive",
 }
 
-var SupportedWordpacks = map[string]string{
-	"english_gb": "English (GB)",
-	"english":    "English (US)",
-	"italian":    "Italian",
-	"german":     "German",
-	"french":     "French",
-	"dutch":      "Dutch",
-	"ukrainian":  "Ukrainian",
-	"russian":    "Russian",
-	"polish":     "Polish",
-	"arabic":     "Arabic",
-	"hebrew":     "Hebrew",
-	"persian":    "Persian",
-	"Persian_1":  "Persian_1",
-	"HP_2_med":   "HP_2_med",
-}
+var SupportedWordpacks = map[string]string{}
 
 const (
 	DrawingBoardBaseWidth  = 1600

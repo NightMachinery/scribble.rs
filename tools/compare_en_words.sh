@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
-US_DICT="../game/words/en_us"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+US_DICT="${REPO_ROOT}/wordpacks/en_us"
 
 # For example on install british dict
 # apt-get install wbritish-large
 
 SYSTEM_GB_DICT='/usr/share/dict/british-english-large'
-OUTPUT_GB_DICT="../game/words/en_gb"
-FIXLIST="./fixlist"
+OUTPUT_GB_DICT="${REPO_ROOT}/wordpacks/en_gb"
+FIXLIST="${SCRIPT_DIR}/fixlist"
 
 rm -f ${FIXLIST} ${OUTPUT_GB_DICT}
 

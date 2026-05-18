@@ -1,16 +1,20 @@
 package game
 
 import (
-	"embed"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/scribble-rs/scribble.rs/internal/sanitize"
+	"github.com/scribble-rs/scribble.rs/wordpacks"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -23,7 +27,8 @@ type WordpackData struct {
 
 var (
 	ErrUnknownWordpack = errors.New("wordpack unknown")
-	WordpackDataByName = map[string]WordpackData{
+	WordpackDataByName = map[string]WordpackData{}
+	knownWordpackData  = map[string]WordpackData{
 		"english_gb": {
 			FileName:   "en_gb",
 			Lowercaser: func() cases.Caser { return cases.Lower(language.BritishEnglish) },
@@ -85,13 +90,130 @@ var (
 			Lowercaser: func() cases.Caser { return cases.Lower(language.AmericanEnglish) },
 		},
 	}
-
-	//go:embed words/*
-	wordFS embed.FS
 )
 
+const wordpackDir = "wordpacks"
+
+func init() {
+	if err := loadWordpacks(); err != nil {
+		log.Printf("Error loading wordpacks: %s\n", err)
+	}
+}
+
+func loadWordpacks() error {
+	loadedWordpacks := map[string]WordpackData{}
+
+	if err := registerWordpackFiles(loadedWordpacks, wordpacks.Files, "."); err != nil {
+		return fmt.Errorf("error loading embedded wordpacks: %w", err)
+	}
+
+	if err := registerWordpackFiles(loadedWordpacks, os.DirFS(wordpackDir), "."); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("error loading wordpacks from %s: %w", wordpackDir, err)
+		}
+	}
+
+	WordpackDataByName = loadedWordpacks
+	SupportedWordpacks = make(map[string]string, len(loadedWordpacks))
+	for wordpackName := range loadedWordpacks {
+		SupportedWordpacks[wordpackName] = wordpackDisplayName(wordpackName)
+	}
+
+	return nil
+}
+
+func registerWordpackFiles(wordpackDataByName map[string]WordpackData, fileSystem fs.FS, dir string) error {
+	entries, err := fs.ReadDir(fileSystem, dir)
+	if err != nil {
+		return err
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || filepath.Ext(entry.Name()) == ".go" {
+			continue
+		}
+
+		fileName := entry.Name()
+		content, err := fs.ReadFile(fileSystem, fileName)
+		if err != nil {
+			return fmt.Errorf("error reading wordpack %s: %w", fileName, err)
+		}
+		if !utf8.Valid(content) {
+			return fmt.Errorf("wordpack %s is not valid UTF-8 text", fileName)
+		}
+
+		wordpackName, wordpackData, ok := knownWordpackForFile(fileName)
+		if !ok {
+			wordpackName = wordpackNameForFile(fileName)
+			wordpackData = WordpackData{
+				Lowercaser: func() cases.Caser { return cases.Lower(language.AmericanEnglish) },
+			}
+		}
+		wordpackData.FileName = fileName
+		wordpackDataByName[wordpackName] = wordpackData
+	}
+
+	return nil
+}
+
+func knownWordpackForFile(fileName string) (string, WordpackData, bool) {
+	for wordpackName, wordpackData := range knownWordpackData {
+		if wordpackData.FileName == fileName {
+			return wordpackName, wordpackData, true
+		}
+	}
+	return "", WordpackData{}, false
+}
+
+func wordpackNameForFile(fileName string) string {
+	switch strings.ToLower(filepath.Ext(fileName)) {
+	case ".txt", ".text":
+		return strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	default:
+		return fileName
+	}
+}
+
+func wordpackDisplayName(wordpackName string) string {
+	switch wordpackName {
+	case "english_gb":
+		return "English (GB)"
+	case "english":
+		return "English (US)"
+	case "italian":
+		return "Italian"
+	case "german":
+		return "German"
+	case "french":
+		return "French"
+	case "dutch":
+		return "Dutch"
+	case "ukrainian":
+		return "Ukrainian"
+	case "russian":
+		return "Russian"
+	case "polish":
+		return "Polish"
+	case "arabic":
+		return "Arabic"
+	case "hebrew":
+		return "Hebrew"
+	case "persian":
+		return "Persian"
+	default:
+		return wordpackName
+	}
+}
+
 func getWordpackFileName(wordpack string) string {
-	return WordpackDataByName[wordpack].FileName
+	if wordpackData, ok := WordpackDataByName[wordpack]; ok {
+		return wordpackData.FileName
+	}
+	return ""
 }
 
 // readWordListInternal exists for testing purposes, it allows passing a custom
@@ -111,8 +233,15 @@ func readWordListInternal(
 		return nil, fmt.Errorf("error invoking wordlistSupplier: %w", err)
 	}
 
-	// Wordlists are guaranteed not to contain any carriage returns (\r).
-	words := strings.Split(sanitize.StripModifierCharacters(lowercaser.String(wordListFile)), "\n")
+	// Wordpacks are newline-separated text files. Empty lines are ignored so a
+	// conventional trailing newline does not become an empty word.
+	words := []string{}
+	for _, word := range strings.Split(sanitize.StripModifierCharacters(lowercaser.String(wordListFile)), "\n") {
+		word = strings.TrimSpace(word)
+		if word != "" {
+			words = append(words, word)
+		}
+	}
 	shuffleWordList(words)
 	return words, nil
 }
@@ -127,11 +256,16 @@ func readDefaultWordList(lowercaser cases.Caser, chosenWordpack string) ([]strin
 	log.Printf("Loading wordpack '%s'\n", chosenWordpack)
 	defer log.Printf("Wordpack loaded '%s'\n", chosenWordpack)
 	return readWordListInternal(lowercaser, chosenWordpack, func(key string) (string, error) {
-		wordBytes, err := wordFS.ReadFile("words/" + key)
-		if err != nil {
+		if wordBytes, err := os.ReadFile(filepath.Join(wordpackDir, key)); err == nil {
+			return strings.ReplaceAll(string(wordBytes), "\r", ""), nil
+		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("error reading wordfile: %w", err)
 		}
 
+		wordBytes, err := wordpacks.Files.ReadFile(key)
+		if err != nil {
+			return "", fmt.Errorf("error reading embedded wordfile: %w", err)
+		}
 		return strings.ReplaceAll(string(wordBytes), "\r", ""), nil
 	})
 }
