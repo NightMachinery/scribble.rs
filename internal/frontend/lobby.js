@@ -441,9 +441,9 @@ async function copyMigrationLink() {
     const lobbyID = currentLobbyID();
     if (!lobbyID) {
         showInfoDialog(
-            '{{.Translation.Get "error-connecting"}}',
-            '{{.Translation.Get "error-connecting-text"}}',
-            '{{.Translation.Get "confirm"}}',
+            {{jsString (.Translation.Get "error-connecting")}},
+            {{jsString (.Translation.Get "error-connecting-text")}},
+            {{jsString (.Translation.Get "confirm")}},
         );
         return;
     }
@@ -476,9 +476,9 @@ async function copyMigrationLink() {
         }
     } catch (_error) {
         showInfoDialog(
-            '{{.Translation.Get "error-connecting"}}',
-            '{{.Translation.Get "error-connecting-text"}}',
-            '{{.Translation.Get "confirm"}}',
+            {{jsString (.Translation.Get "error-connecting")}},
+            {{jsString (.Translation.Get "error-connecting-text")}},
+            {{jsString (.Translation.Get "confirm")}},
         );
     }
 }

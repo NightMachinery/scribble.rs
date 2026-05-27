@@ -4,6 +4,7 @@ import (
 	//nolint:gosec //We just use this for cache busting, so it's secure enough
 
 	"crypto/md5"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -64,6 +65,7 @@ func NewHandler(cfg *config.Config) (*SSRHandler, error) {
 
 	indexJsRawTemplate, err := txtTemplate.
 		New("index-js").
+		Funcs(txtTemplate.FuncMap{"jsString": jsStringLiteral}).
 		Parse(indexJsRaw)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing index js template: %w", err)
@@ -71,6 +73,7 @@ func NewHandler(cfg *config.Config) (*SSRHandler, error) {
 
 	lobbyJsRawTemplate, err := txtTemplate.
 		New("lobby-js").
+		Funcs(txtTemplate.FuncMap{"jsString": jsStringLiteral}).
 		Parse(lobbyJsRaw)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing lobby js template: %w", err)
@@ -108,6 +111,14 @@ func NewHandler(cfg *config.Config) (*SSRHandler, error) {
 		indexJsRawTemplate: indexJsRawTemplate,
 	}
 	return handler, nil
+}
+
+func jsStringLiteral(value string) (string, error) {
+	jsonValue, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("error escaping JavaScript string: %w", err)
+	}
+	return string(jsonValue), nil
 }
 
 func (handler *SSRHandler) indexJs(writer http.ResponseWriter, request *http.Request) {

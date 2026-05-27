@@ -2,6 +2,9 @@ package frontend
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -60,6 +63,35 @@ func Test_templateIndexPage(t *testing.T) {
 		t.Errorf("Error templating: %s", err)
 	}
 	require.True(t, strings.Contains(buffer.String(), "allowed_edit_distance_percent"))
+}
+
+func TestRenderedEnglishLobbyJavaScriptIsSyntaxValid(t *testing.T) {
+	t.Parallel()
+
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node is required to syntax-check rendered JavaScript")
+	}
+
+	handler, err := NewHandler(&config.Default)
+	require.NoError(t, err)
+
+	var buffer bytes.Buffer
+	err = handler.lobbyJsRawTemplate.ExecuteTemplate(&buffer, "lobby-js", &lobbyJsData{
+		BasePageConfig: handler.basePageConfig,
+		GameConstants:  api.GameConstantsData,
+		Translation:    translations.DefaultTranslation,
+		Locale:         "en-us",
+	})
+	require.NoError(t, err)
+
+	rendered := buffer.String()
+	require.NotContains(t, rendered, "'Scribble.rs couldn't establish a socket connection.\n")
+
+	jsPath := filepath.Join(t.TempDir(), "lobby.js")
+	require.NoError(t, os.WriteFile(jsPath, buffer.Bytes(), 0o600))
+
+	output, err := exec.Command("node", "--check", jsPath).CombinedOutput()
+	require.NoError(t, err, string(output))
 }
 
 func Test_createDefaultIndexPageDataUsesUpdatedLobbyDefaults(t *testing.T) {
