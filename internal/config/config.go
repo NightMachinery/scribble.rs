@@ -82,7 +82,8 @@ type Config struct {
 }
 
 var Default = Config{
-	Port: 8080,
+	Port:    8080,
+	RootURL: "https://localhost:8080",
 	LobbySettingDefaults: LobbySettingDefaults{
 		Public:                     "false",
 		DrawingTime:                "120",

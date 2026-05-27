@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-DEFAULT_PUBLIC_URL='http://scribble.pinky.lilf.ir'
+DEFAULT_PUBLIC_URL='https://scribble.pinky.lilf.ir'
 APP_HOST='127.0.0.1'
 APP_PORT='38180'
 SESSION_NAME='scribble-rs-self-host'
@@ -91,7 +91,7 @@ normalize_public_url() {
   local input="${1:-$DEFAULT_PUBLIC_URL}"
   input="${input%/}"
   if [[ "$input" != *"://"* ]]; then
-    input="http://$input"
+    input="https://$input"
   fi
   print -r -- "$input"
 }

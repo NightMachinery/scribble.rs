@@ -68,6 +68,7 @@ Available settings:
 | ----------------------------------------- | ---------------------------------------------------------------- | ------- | -------- |
 | PORT                                      | HTTP port that the server listens to.                            | 8080    | True     |
 | NETWORK_ADDRESS                           | TCP address that the server listens to.                          |         | False    |
+| ROOT_URL                                  | Public scheme and host. `https://` enables HTTP-to-HTTPS redirects unless proxy headers already mark the request secure. | https://localhost:8080 | False |
 | ROOT_PATH                                 | Changes the path (after your domain) that the server listens to. |         | False    |
 | CORS_ALLOWED_ORIGINS                      |                                                                  | *       | False    |
 | CORS_ALLOW_CREDENTIALS                    |                                                                  |         | False    |

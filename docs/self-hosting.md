@@ -10,7 +10,7 @@ The `self_host.zsh` helper below builds the current local checkout, updates `~/C
 
 ## What it does
 
-- public URL: defaults to `http://scribble.pinky.lilf.ir`
+- public URL: defaults to `https://scribble.pinky.lilf.ir`
 - internal bind: `127.0.0.1:38180`
 - process manager: `tmux`
 - reverse proxy: `Caddy`
@@ -37,7 +37,7 @@ From the repo root:
 
 ```zsh
 ./self_host.zsh setup
-./self_host.zsh setup http://m2.pinky.lilf.ir
+./self_host.zsh setup m2.pinky.lilf.ir
 ./self_host.zsh redeploy
 ./self_host.zsh redeploy https://scribble.example.internal
 ./self_host.zsh start
@@ -71,11 +71,12 @@ Stops the tmux session.
 ## URL behavior
 
 The script accepts a full public URL.
+If no scheme is supplied, it defaults to `https://`.
 
 Examples:
 
 ```zsh
-./self_host.zsh setup http://m2.pinky.lilf.ir
+./self_host.zsh setup m2.pinky.lilf.ir
 ./self_host.zsh setup https://games.example.internal
 ./self_host.zsh setup http://intranet.example.local/scribble
 ```
@@ -85,6 +86,12 @@ It uses:
 - `ROOT_URL` = scheme + host portion
 - `ROOT_PATH` = optional path portion
 - Caddy reverse proxy rules that match the same URL/path
+
+When `ROOT_URL` uses `https://`, the Go server redirects plain HTTP requests
+to HTTPS. Reverse proxies that send `X-Forwarded-Proto: https` or
+`Forwarded: proto=https` are treated as already secure, which avoids redirect
+loops behind Caddy. The internal `/health` endpoint is left available over
+plain HTTP for local reverse-proxy and platform health checks.
 
 If the public URL host ends with `.ir`, the script also writes this lobby
 default override into `.self-host/app.env`:

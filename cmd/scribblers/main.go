@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path"
@@ -98,14 +99,80 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr: address,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Handler: redirectHTTPToHTTPS(cfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/" && r.URL.Path[len(r.URL.Path)-1] == '/' {
 				r.URL.Path = r.URL.Path[:len(r.URL.Path)-1]
 			}
 
 			router.ServeHTTP(w, r)
-		}),
+		})),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	log.Fatalln(httpServer.ListenAndServe())
+}
+
+func redirectHTTPToHTTPS(cfg *config.Config, next http.Handler) http.Handler {
+	if cfg.RootURL == "" {
+		return next
+	}
+
+	rootURL, err := url.Parse(cfg.RootURL)
+	if err != nil || rootURL.Scheme != "https" || rootURL.Host == "" {
+		return next
+	}
+
+	healthPath := "/" + path.Join(cfg.RootPath, "health")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requestScheme(r) == "https" || r.URL.Path == healthPath {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		redirectURL := *r.URL
+		redirectURL.Scheme = "https"
+		redirectURL.Host = hostForRedirect(r, rootURL.Host)
+		http.Redirect(w, r, redirectURL.String(), http.StatusPermanentRedirect)
+	})
+}
+
+func requestScheme(request *http.Request) string {
+	if request.TLS != nil {
+		return "https"
+	}
+
+	if scheme := firstForwardedHeaderValue(request.Header.Get("X-Forwarded-Proto")); scheme != "" {
+		return strings.ToLower(scheme)
+	}
+
+	if forwarded := firstForwardedHeaderValue(request.Header.Get("Forwarded")); forwarded != "" {
+		for part := range strings.SplitSeq(forwarded, ";") {
+			key, value, found := strings.Cut(strings.TrimSpace(part), "=")
+			if !found || !strings.EqualFold(key, "proto") {
+				continue
+			}
+			return strings.ToLower(strings.Trim(value, "`'\""))
+		}
+	}
+
+	return "http"
+}
+
+func firstForwardedHeaderValue(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	firstValue := strings.TrimSpace(strings.Split(value, ",")[0])
+	return strings.Trim(firstValue, "`'\"")
+}
+
+func hostForRedirect(request *http.Request, fallback string) string {
+	host := request.Host
+	if forwardedHost := firstForwardedHeaderValue(request.Header.Get("X-Forwarded-Host")); forwardedHost != "" {
+		host = forwardedHost
+	}
+	if host == "" {
+		host = fallback
+	}
+	return host
 }
