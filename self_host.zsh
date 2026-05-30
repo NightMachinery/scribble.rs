@@ -252,6 +252,16 @@ build_binary() {
 }
 
 render_caddy_block() {
+  if [[ "$ROOT_URL" == https://* ]]; then
+    local hostport="${ROOT_URL#https://}"
+    cat <<EOF_REDIRECT
+http://$hostport {
+    redir https://$hostport{uri} permanent
+}
+
+EOF_REDIRECT
+  fi
+
   if [[ -n "$ROOT_PATH_WITH_SLASH" ]]; then
     cat <<EOF_BLOCK
 $SITE_ADDRESS {

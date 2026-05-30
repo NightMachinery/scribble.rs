@@ -87,11 +87,13 @@ It uses:
 - `ROOT_PATH` = optional path portion
 - Caddy reverse proxy rules that match the same URL/path
 
-When `ROOT_URL` uses `https://`, the Go server redirects plain HTTP requests
-to HTTPS. Reverse proxies that send `X-Forwarded-Proto: https` or
-`Forwarded: proto=https` are treated as already secure, which avoids redirect
-loops behind Caddy. The internal `/health` endpoint is left available over
-plain HTTP for local reverse-proxy and platform health checks.
+When `ROOT_URL` uses `https://`, the generated Caddy block includes an
+explicit `http://...` site that permanently redirects to the matching HTTPS
+URL. The Go server also redirects plain HTTP requests to HTTPS as a fallback.
+Reverse proxies that send `X-Forwarded-Proto: https` or `Forwarded:
+proto=https` are treated as already secure, which avoids redirect loops behind
+Caddy. The internal `/health` endpoint is left available over plain HTTP for
+local reverse-proxy and platform health checks.
 
 If the public URL host ends with `.ir`, the script also writes this lobby
 default override into `.self-host/app.env`:
