@@ -2482,7 +2482,7 @@ const set_dummy_word_hints = () => {
     applyWordHints(
         [
             {
-                character: "D",
+                character: 68, // "D"
                 underline: true,
             },
         ],
