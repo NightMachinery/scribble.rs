@@ -778,6 +778,33 @@ kbd {
     #lobby {
         grid-template-columns: 12rem auto 15rem;
     }
+
+    /* Ensure toolbox is more compact and visible */
+    #toolbox {
+        column-gap: 5px;
+        row-gap: 3px;
+    }
+
+    .color-button-container {
+        height: 38px;
+    }
+
+    .color-button {
+        width: 19px;
+        height: 19px;
+    }
+
+    .canvas-button,
+    .line-width-button-content {
+        width: 40px;
+        height: 40px;
+    }
+
+    .line-width-button-content > *,
+    .canvas-button > * {
+        width: 32px;
+        height: 32px;
+    }
 }
 
 @media only screen and (max-width: 812px) {
