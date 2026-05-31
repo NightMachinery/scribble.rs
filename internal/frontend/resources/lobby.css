@@ -203,6 +203,9 @@ kbd {
     grid-template-rows: min-content min-content min-content minmax(12rem, 1fr);
     grid-gap: 5px;
     flex: 1 1;
+    /* Ensure lobby doesn't overflow viewport */
+    max-height: 100vh;
+    overflow: hidden;
 }
 
 /*
@@ -216,6 +219,8 @@ kbd {
     position: relative;
     grid-column: 1 / 4;
     grid-row: 2;
+    /* Limit drawing board height on desktop to ensure chat and controls are visible */
+    max-height: min(calc(100vh - 32rem), calc(100vw * 0.5625));
 }
 
 #drawing-board-inner-wrapper {
