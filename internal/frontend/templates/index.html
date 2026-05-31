@@ -155,6 +155,11 @@
                                 </label>
                                 <input class="input-item" type="checkbox" id="assign_random_names_checkbox" {{if ne .AssignRandomNames "false"}}checked{{end}}>
                                 <input type="hidden" id="assign_random_names" name="assign_random_names" value="{{if eq .AssignRandomNames "false"}}false{{else}}true{{end}}">
+                                <label class="lobby-create-label" for="hide_scores_mid_game_checkbox">
+                                    {{.Translation.Get "hide-scores-mid-game-setting"}}
+                                </label>
+                                <input class="input-item" type="checkbox" id="hide_scores_mid_game_checkbox" {{if ne .HideScoresMidGame "false"}}checked{{end}}>
+                                <input type="hidden" id="hide_scores_mid_game" name="hide_scores_mid_game" value="{{if eq .HideScoresMidGame "false"}}false{{else}}true{{end}}">
                                 <label class="lobby-create-label" for="password">
                                     {{.Translation.Get "lobby-password-setting"}}
                                 </label>

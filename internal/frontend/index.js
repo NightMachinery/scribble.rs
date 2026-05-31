@@ -29,6 +29,11 @@ document.getElementById("lobby-create").addEventListener("submit", (event) => {
     ).checked
         ? "true"
         : "false";
+    document.getElementById("hide_scores_mid_game").value = document.getElementById(
+        "hide_scores_mid_game_checkbox",
+    ).checked
+        ? "true"
+        : "false";
     if (event.submitter.id === "create-public") {
         check_box.value = "true";
         check_box.setAttribute("checked", "");

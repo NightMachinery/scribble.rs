@@ -251,6 +251,7 @@ func (handler *SSRHandler) ssrCreateLobby(writer http.ResponseWriter, request *h
 			WordsPerTurn:               request.Form.Get("words_per_turn"),
 			Password:                   request.Form.Get("password"),
 			AssignRandomNames:          request.Form.Get("assign_random_names"),
+			HideScoresMidGame:          request.Form.Get("hide_scores_mid_game"),
 		},
 		Wordpack:          requestedWordpack,
 		Wordpacks:         game.SupportedWordpacks,
