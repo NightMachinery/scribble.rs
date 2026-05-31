@@ -146,15 +146,26 @@ kbd {
     background-color: white;
     border-left: 1px solid rgb(225, 225, 225);
     font-size: 0.95rem;
-    gap: 0.25rem;
-    padding: 0 0.5rem;
+    gap: 0.35rem;
+    padding: 0 0.6rem;
     white-space: nowrap;
+    display: flex;
+}
+
+#current-painter > span:first-child {
+    color: rgb(92, 92, 92);
+    font-weight: 500;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 #current-painter-name {
     max-width: 12rem;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 600;
+    color: rgb(240, 105, 127);
 }
 
 .word-length-hint {
@@ -925,7 +936,12 @@ body.mobile-landscape-mode #lobby {
     grid-template-rows: min-content min-content min-content minmax(8rem, 1fr);
 }
 
-body.mobile-landscape-mode #lobby-header,
+body.mobile-landscape-mode #lobby-header {
+    grid-column: 1 / 3;
+    /* Adjust grid to give more space to center element */
+    grid-template-columns: minmax(8rem, auto) 1fr minmax(8rem, auto);
+}
+
 body.mobile-landscape-mode #drawing-board-wrapper,
 body.mobile-landscape-mode #toolbox {
     grid-column: 1 / 3;
@@ -942,6 +958,46 @@ body.mobile-landscape-mode #chat {
     grid-column: 2;
     grid-row: 4;
     min-height: 8rem;
+}
+
+/* Hide "Painter:" label in landscape mode to save space */
+body.mobile-landscape-mode #current-painter > span:first-child {
+    display: none;
+}
+
+/* Adjust current painter display for landscape */
+body.mobile-landscape-mode #current-painter {
+    padding: 0 0.3rem;
+    font-size: 0.85rem;
+}
+
+/* Prioritize word container over painter name in landscape */
+body.mobile-landscape-mode #lobby-header-center-element {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.25rem;
+    overflow: hidden;
+}
+
+body.mobile-landscape-mode #word-container {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+body.mobile-landscape-mode #current-painter {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+body.mobile-landscape-mode #current-painter-name {
+    max-width: 8rem;
+}
+
+/* Ensure toolbox is visible without scrolling in landscape */
+body.mobile-landscape-mode #toolbox {
+    overflow-x: auto;
+    overflow-y: visible;
 }
 
 #menu-button-container {
