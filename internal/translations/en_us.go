@@ -37,6 +37,7 @@ func initEnglishTranslation() *Translation {
 	translation.put("save", "Save")
 	translation.put("toggle-fullscreen", "Toggle fullscreen")
 	translation.put("toggle-landscape", "Landscape drawing mode")
+	translation.put("toggle-smart-landscape", "Smart landscape mode")
 	translation.put("toggle-spectate", "Toggle spectator mode")
 	translation.put("current-painter", "Painter")
 	translation.put("players-title", "Players")

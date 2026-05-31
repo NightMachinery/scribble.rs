@@ -77,6 +77,7 @@ const migrateDeviceButton = document.getElementById("migrate-device-button");
 const kickButton = document.getElementById("kick-button");
 const kickButtonLabel = document.getElementById("kick-button-label");
 const toggleLandscapeButton = document.getElementById("toggle-landscape-button");
+const toggleSmartLandscapeButton = document.getElementById("toggle-smart-landscape-button");
 const toggleSpectateButton = document.getElementById("toggle-spectate-button");
 const pauseGameButton = document.getElementById("pause-game-button");
 const pauseGameButtonLabel = document.getElementById("pause-game-button-label");
@@ -742,6 +743,58 @@ async function toggleLandscapeMode() {
 }
 toggleLandscapeButton.addEventListener("click", toggleLandscapeMode);
 
+let smartLandscapeEnabled = localStorage.getItem("smartLandscape") === "true";
+updateSmartLandscapeButton();
+
+function updateSmartLandscapeButton() {
+    toggleSmartLandscapeButton.classList.toggle("header-button-active", smartLandscapeEnabled);
+    toggleSmartLandscapeButton.setAttribute("aria-pressed", smartLandscapeEnabled ? "true" : "false");
+}
+
+async function toggleSmartLandscapeMode() {
+    hideMenu();
+    smartLandscapeEnabled = !smartLandscapeEnabled;
+    localStorage.setItem("smartLandscape", smartLandscapeEnabled ? "true" : "false");
+    updateSmartLandscapeButton();
+
+    // If disabling smart landscape while in landscape mode, exit landscape
+    if (!smartLandscapeEnabled && document.body.classList.contains("mobile-landscape-mode")) {
+        await setLandscapeMode(false);
+    }
+
+    // If enabling smart landscape and currently drawing, enter landscape
+    if (smartLandscapeEnabled && allowDrawing) {
+        await setLandscapeMode(true);
+    }
+}
+toggleSmartLandscapeButton.addEventListener("click", toggleSmartLandscapeMode);
+
+async function setLandscapeMode(enable) {
+    const isCurrentlyEnabled = document.body.classList.contains("mobile-landscape-mode");
+    if (enable === isCurrentlyEnabled) {
+        return; // Already in desired state
+    }
+
+    document.body.classList.toggle("mobile-landscape-mode", enable);
+    toggleLandscapeButton.classList.toggle("header-button-active", enable);
+    toggleLandscapeButton.setAttribute("aria-pressed", enable ? "true" : "false");
+
+    try {
+        if (enable) {
+            if (document.fullscreenElement === null) {
+                await document.body.requestFullscreen();
+            }
+            if (screen.orientation && screen.orientation.lock) {
+                await screen.orientation.lock("landscape");
+            }
+        } else if (screen.orientation && screen.orientation.unlock) {
+            screen.orientation.unlock();
+        }
+    } catch (_error) {
+        // Some mobile browsers, notably iOS Safari, do not allow orientation locks.
+    }
+}
+
 function showLobbySettingsDialog() {
     hideMenu();
     lobbySettingsDialog.style.visibility = "visible";
@@ -1356,8 +1409,16 @@ function setAllowDrawing(value) {
 
     if (allowDrawing) {
         document.getElementById("toolbox").style.display = "flex";
+        // Smart landscape: enter landscape when starting to draw
+        if (smartLandscapeEnabled) {
+            setLandscapeMode(true);
+        }
     } else {
         document.getElementById("toolbox").style.display = "none";
+        // Smart landscape: exit landscape when done drawing
+        if (smartLandscapeEnabled) {
+            setLandscapeMode(false);
+        }
     }
 }
 
