@@ -306,6 +306,10 @@
                                     class="dialog-button">{{.Translation.Get "close"}}</button>
                             </div>
                         </div>
+
+                        <!-- Minimized dialogs collapse into chips here. Hidden
+                        while empty so it never blocks drawing on the canvas. -->
+                        <div id="dialog-tray" style="display: none;"></div>
                     </div>
                 </div>
             </div>

@@ -175,6 +175,8 @@ func initEnglishTranslation() *Translation {
 	// Generic words
 	// "close" as in "closing the window"
 	translation.put("close", "Close")
+	translation.put("minimize", "Minimize")
+	translation.put("restore", "Restore")
 	translation.put("no", "No")
 	translation.put("yes", "Yes")
 	translation.put("system", "System")

@@ -140,7 +140,186 @@ function hideMenu() {
     menu.hidePopover();
 }
 
-function showDialog(id, title, contentNode, buttonBar) {
+// ---------------------------------------------------------------------------
+// Dialog manager
+//
+// Every ".center-dialog" (both the static ones in lobby.html and the dynamic
+// ones built by showDialog) is shown/stacked/minimized through this manager.
+//
+// `dialogStack` holds the ids of all currently-open dialogs in focus order.
+// The LAST entry is the foreground window; every other entry is minimized into
+// the tray. Closing the foreground auto-restores the most recent minimized one.
+// ---------------------------------------------------------------------------
+const dialogTray = document.getElementById("dialog-tray");
+const dialogStack = [];
+// Ids of dialogs created dynamically by showDialog(); these get removed from the
+// DOM on close, whereas static dialogs are only hidden.
+const dynamicDialogIds = new Set();
+// Dialogs that must never be minimized and always stay foreground (e.g. the
+// reconnect dialog). They're kept at the end of the stack.
+const criticalDialogIds = new Set(["reconnect-dialog"]);
+
+function dialogTitleText(el) {
+    const titleNode = el.querySelector(".dialog-title");
+    return titleNode ? titleNode.innerText : "";
+}
+
+function isDialogClosable(el) {
+    return el.dataset.closable === "true";
+}
+
+// Injects the window control cluster (minimize, and optionally close) into a
+// dialog. `onClose` is invoked when the user presses the close button; if it's
+// omitted the dialog is not user-closable and only gets a minimize button.
+function ensureDialogControls(el, onClose) {
+    if (el.querySelector(".dialog-controls")) {
+        return;
+    }
+    // Critical dialogs (reconnect) are neither minimizable nor closable.
+    if (criticalDialogIds.has(el.id)) {
+        return;
+    }
+
+    const controls = document.createElement("div");
+    controls.classList.add("dialog-controls");
+
+    const minimizeButton = document.createElement("button");
+    minimizeButton.classList.add("dialog-control-button", "dialog-minimize-button");
+    minimizeButton.type = "button";
+    minimizeButton.innerText = "—";
+    minimizeButton.title = '{{.Translation.Get "minimize"}}';
+    minimizeButton.setAttribute("aria-label", '{{.Translation.Get "minimize"}}');
+    minimizeButton.addEventListener("click", () => dialogMinimize(el));
+    controls.appendChild(minimizeButton);
+
+    if (onClose) {
+        el.dataset.closable = "true";
+        const closeButton = document.createElement("button");
+        closeButton.classList.add("dialog-control-button", "dialog-close-button");
+        closeButton.type = "button";
+        closeButton.innerText = "✕";
+        closeButton.title = '{{.Translation.Get "close"}}';
+        closeButton.setAttribute("aria-label", '{{.Translation.Get "close"}}');
+        closeButton.addEventListener("click", onClose);
+        controls.appendChild(closeButton);
+    }
+
+    el.insertBefore(controls, el.firstChild);
+}
+
+// Opens (or re-focuses) a dialog element, making it the foreground window.
+function dialogOpen(el) {
+    if (!el) {
+        return;
+    }
+    const existing = dialogStack.indexOf(el.id);
+    if (existing !== -1) {
+        dialogStack.splice(existing, 1);
+    }
+    dialogStack.push(el.id);
+    keepCriticalOnTop();
+    renderDialogs();
+}
+
+// Closes a dialog. Dynamic dialogs are removed from the DOM. The next most
+// recent open dialog (if any) becomes the foreground automatically.
+function dialogClose(el) {
+    if (!el) {
+        return;
+    }
+    const index = dialogStack.indexOf(el.id);
+    if (index !== -1) {
+        dialogStack.splice(index, 1);
+    }
+    el.classList.remove("dialog-foreground");
+    if (dynamicDialogIds.has(el.id)) {
+        dynamicDialogIds.delete(el.id);
+        el.remove();
+    }
+    renderDialogs();
+}
+
+// Sends the foreground dialog to the tray, surfacing whatever was behind it.
+function dialogMinimize(el) {
+    if (!el || criticalDialogIds.has(el.id)) {
+        return;
+    }
+    const index = dialogStack.indexOf(el.id);
+    if (index === -1) {
+        return;
+    }
+    // Move to the front so the previously-focused dialog becomes foreground.
+    dialogStack.splice(index, 1);
+    dialogStack.unshift(el.id);
+    keepCriticalOnTop();
+    renderDialogs();
+}
+
+// Brings an already-open (minimized) dialog back to the foreground.
+function dialogFocusById(id) {
+    const el = document.getElementById(id);
+    if (el) {
+        dialogOpen(el);
+    }
+}
+
+// Critical dialogs (reconnect) must always be the foreground while open.
+function keepCriticalOnTop() {
+    for (const id of criticalDialogIds) {
+        const index = dialogStack.indexOf(id);
+        if (index !== -1 && index !== dialogStack.length - 1) {
+            dialogStack.splice(index, 1);
+            dialogStack.push(id);
+        }
+    }
+}
+
+// Reflects dialogStack onto the DOM: last entry is foreground, the rest become
+// tray chips.
+function renderDialogs() {
+    const foregroundId = dialogStack[dialogStack.length - 1];
+
+    for (const id of dialogStack) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.toggle("dialog-foreground", id === foregroundId);
+        }
+    }
+
+    // Rebuild the minimized tray (everything open except the foreground).
+    dialogTray.replaceChildren(
+        ...dialogStack
+            .filter((id) => id !== foregroundId)
+            .map((id) => {
+                const el = document.getElementById(id);
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.classList.add("dialog-tray-chip");
+                chip.innerText = el ? dialogTitleText(el) : id;
+                chip.title = '{{.Translation.Get "restore"}}';
+                chip.addEventListener("click", () => dialogFocusById(id));
+                return chip;
+            }),
+    );
+    dialogTray.style.display = dialogTray.childElementCount > 0 ? "flex" : "none";
+}
+
+// Wires window controls onto the static dialogs declared in lobby.html. The
+// game-flow dialogs (word/start/waitchoose/game-over) are server-driven, so they
+// only get a minimize button; the user-driven ones also get a close button that
+// reuses their existing hide logic. Hide functions are hoisted, so referencing
+// them here at load time is fine.
+function registerStaticDialogs() {
+    ensureDialogControls(wordDialog);
+    ensureDialogControls(startDialog);
+    ensureDialogControls(waitChooseDialog);
+    ensureDialogControls(gameOverDialog);
+    ensureDialogControls(namechangeDialog, () => hideNameChangeDialog());
+    ensureDialogControls(lobbySettingsDialog, () => hideLobbySettingsDialog());
+    ensureDialogControls(kickDialog, () => hideKickDialog());
+}
+
+function showDialog(id, title, contentNode, buttonBar, onClose) {
     hideMenu();
 
     const newDialog = document.createElement("div");
@@ -163,8 +342,17 @@ function showDialog(id, title, contentNode, buttonBar) {
         newDialog.appendChild(buttonBar);
     }
 
-    newDialog.style.visibility = "visible";
+    if (id && id !== "") {
+        dynamicDialogIds.add(id);
+    }
+    // Dynamic dialogs are user-closable by default unless a caller opts out.
+    ensureDialogControls(
+        newDialog,
+        onClose === null ? undefined : () => dialogClose(newDialog),
+    );
+
     centerDialogs.appendChild(newDialog);
+    dialogOpen(newDialog);
 }
 
 // Shows an information dialog with a button that closes the dialog and
@@ -214,10 +402,7 @@ function createDialogButtonBar(...buttons) {
 function closeDialog(id) {
     const dialog = document.getElementById(id);
     if (dialog !== undefined && dialog !== null) {
-        const parent = dialog.parentElement;
-        if (parent !== undefined && parent !== null) {
-            parent.removeChild(dialog);
-        }
+        dialogClose(dialog);
     }
 }
 
@@ -576,7 +761,7 @@ function showKickDialog() {
         ownerForceEndGameButton.style.display =
             canUseModeratorActions && gameState === "ongoing" ? "inline-block" : "none";
 
-        kickDialog.style.visibility = "visible";
+        dialogOpen(kickDialog);
     }
 }
 document
@@ -584,7 +769,7 @@ document
     .addEventListener("click", showKickDialog);
 
 function hideKickDialog() {
-    kickDialog.style.visibility = "hidden";
+    dialogClose(kickDialog);
 }
 document
     .getElementById("kick-close-button")
@@ -628,7 +813,7 @@ function showNameChangeDialog(clearAutoNamed) {
         mustChooseName || (clearAutoNamed && ownPlayer && ownPlayer.autoNamed);
 
     namechangeCloseButton.style.display = mustChooseName ? "none" : "";
-    namechangeDialog.style.visibility = "visible";
+    dialogOpen(namechangeDialog);
     namechangeField.value = shouldClear ? "" : ownName;
     namechangeField.focus();
     if (shouldClear) {
@@ -644,7 +829,7 @@ function hideNameChangeDialog() {
     if (ownPlayer && ownPlayer.needsName) {
         return;
     }
-    namechangeDialog.style.visibility = "hidden";
+    dialogClose(namechangeDialog);
 }
 document
     .getElementById("namechange-close-button")
@@ -808,12 +993,12 @@ async function setLandscapeMode(enable) {
 
 function showLobbySettingsDialog() {
     hideMenu();
-    lobbySettingsDialog.style.visibility = "visible";
+    dialogOpen(lobbySettingsDialog);
 }
 lobbySettingsButton.addEventListener("click", showLobbySettingsDialog);
 
 function hideLobbySettingsDialog() {
-    lobbySettingsDialog.style.visibility = "hidden";
+    dialogClose(lobbySettingsDialog);
 }
 document
     .getElementById("lobby-settings-close-button")
@@ -1441,7 +1626,7 @@ function chooseWord(index) {
         }),
     );
     setAllowDrawing(true);
-    wordDialog.style.visibility = "hidden";
+    dialogClose(wordDialog);
 }
 
 function onVotekickPlayer(playerId) {
@@ -1617,8 +1802,8 @@ const handleEvent = (parsed) => {
             `{{.Translation.Get "close-guess"}}`.format(parsed.data),
         );
     } else if (parsed.type === "update-wordhint") {
-        wordDialog.style.visibility = "hidden";
-        waitChooseDialog.style.visibility = "hidden";
+        dialogClose(wordDialog);
+        dialogClose(waitChooseDialog);
         applyWordHints(parsed.data);
 
         // We don't do this in applyWordHints because that's called in all kinds of places
@@ -1682,8 +1867,8 @@ const handleEvent = (parsed) => {
     } else if (parsed.type === "clear-drawing-board") {
         clear(context);
     } else if (parsed.type === "word-chosen") {
-        wordDialog.style.visibility = "hidden";
-        waitChooseDialog.style.visibility = "hidden";
+        dialogClose(wordDialog);
+        dialogClose(waitChooseDialog);
         setRoundTimeLeft(parsed.data.timeLeft);
         applyWordHints(parsed.data.hints);
         setAllowDrawing(drawerID === ownID);
@@ -1722,12 +1907,12 @@ const handleEvent = (parsed) => {
         //As soon as a turn starts, the round should be ongoing, so we make
         //sure that all types of dialogs, that indicate the game isn't
         //ongoing, are not visible anymore.
-        startDialog.style.visibility = "hidden";
+        dialogClose(startDialog);
         forceRestartButton.style.display = "none";
-        gameOverDialog.style.visibility = "hidden";
+        dialogClose(gameOverDialog);
 
         //If a player doesn't choose, the dialog will still be up.
-        wordDialog.style.visibility = "hidden";
+        dialogClose(wordDialog);
         playWav('{{.RootPath}}/resources/{{.WithCacheBust "end-turn.wav"}}');
 
         clear(context);
@@ -1744,7 +1929,7 @@ const handleEvent = (parsed) => {
         if (drawerID !== ownID) {
             //Show additional dialog, that another user (drawer) is choosing a word
             waitChooseDrawerSpan.innerText = drawerName;
-            waitChooseDialog.style.visibility = "visible";
+            dialogOpen(waitChooseDialog);
         }
 
         setAllowDrawing(false);
@@ -1752,7 +1937,7 @@ const handleEvent = (parsed) => {
         playWav('{{.RootPath}}/resources/{{.WithCacheBust "your-turn.wav"}}');
         //This dialog could potentially stay visible from last
         //turn, in case nobody has chosen a word.
-        waitChooseDialog.style.visibility = "hidden";
+        dialogClose(waitChooseDialog);
         promptWords(parsed.data);
     } else if (parsed.type === "drawing") {
         applyDrawData(parsed.data);
@@ -2029,7 +2214,7 @@ const handleReadyEvent = (ready) => {
     }
 
     if (ready.gameState === "unstarted") {
-        startDialog.style.visibility = "visible";
+        dialogOpen(startDialog);
         if (canModerate) {
             forceStartButton.style.display = "block";
             waitingForOwnerStart.style.display = "none";
@@ -2038,7 +2223,7 @@ const handleReadyEvent = (ready) => {
             waitingForOwnerStart.style.display = "";
         }
     } else if (ready.gameState === "gameOver") {
-        gameOverDialog.style.visibility = "visible";
+        dialogOpen(gameOverDialog);
         if (canModerate) {
             forceRestartButton.style.display = "block";
             waitingForOwnerRestart.style.display = "none";
@@ -2138,7 +2323,7 @@ const handleReadyEvent = (ready) => {
         // Lack of wordHints implies that word has been chosen yet.
         if (!ready.wordHints && drawerID !== ownID) {
             waitChooseDrawerSpan.innerText = drawerName;
-            waitChooseDialog.style.visibility = "visible";
+            dialogOpen(waitChooseDialog);
         }
     }
 };
@@ -2190,7 +2375,7 @@ function promptWords(data) {
             return button;
         }),
     );
-    wordDialog.style.visibility = "visible";
+    dialogOpen(wordDialog);
 }
 
 function playWav(file) {
@@ -2592,6 +2777,8 @@ const set_dummy_word_hints = () => {
 };
 set_dummy_word_hints();
 
+registerStaticDialogs();
+
 const applyDrawData = (drawElements) => {
     clear(context);
 
@@ -2809,13 +2996,9 @@ function onGlobalMouseMove(event) {
 window.addEventListener("mousemove", onGlobalMouseMove);
 
 function isAnyDialogVisible() {
-    for (let i = 0; i < centerDialogs.children.length; i++) {
-        if (centerDialogs.children[i].style.visibility === "visible") {
-            return true;
-        }
-    }
-
-    return false;
+    // Only a foreground dialog blocks tool shortcuts; minimized dialogs (tray
+    // chips) don't, so the canvas stays usable while they're parked.
+    return dialogStack.length > 0;
 }
 
 function onKeyDown(event) {

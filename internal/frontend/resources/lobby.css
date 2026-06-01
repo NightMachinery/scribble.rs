@@ -237,8 +237,14 @@ kbd {
 }
 
 .center-dialog {
-    /* All dialogs are initially invisible. */
+    /* Dialogs are only shown when the manager adds .dialog-foreground. */
     visibility: hidden;
+    opacity: 0;
+    /* Slight pop-in; the transform/opacity animate when becoming foreground. */
+    transform: translateY(0.75rem) scale(0.98);
+    transition:
+        opacity 0.16s ease,
+        transform 0.16s ease;
     /* Since the parent ignores all of those events, we need to
     restore the handling, since our dialogs have buttons. */
     pointer-events: all;
@@ -247,16 +253,98 @@ kbd {
     position: absolute;
     max-width: min(46rem, calc(100vw - 1rem));
     max-height: calc(100svh - 1rem);
-    background-color: rgb(225, 221, 221);
-    padding: 1rem;
+    background-color: rgb(238, 235, 240);
+    padding: 1.75rem 1rem 1rem;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
     align-items: center;
     overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: var(--component-border-radius);
+    box-shadow: 0 1.5rem 3rem rgba(0, 0, 0, 0.35);
     min-height: 0;
+}
+
+.center-dialog.dialog-foreground {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    /* Above any minimized siblings, below the reconnect dialog (z-index 100). */
+    z-index: 30;
+}
+
+/* Window controls (minimize / close) pinned to the dialog's top-right. */
+.dialog-controls {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    display: flex;
+    gap: 0.25rem;
+    z-index: 1;
+}
+
+.dialog-control-button {
+    width: 1.6rem;
+    height: 1.6rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(0, 0, 0, 0.08);
+    color: rgb(60, 60, 60);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.dialog-control-button:hover {
+    background-color: rgba(0, 0, 0, 0.16);
+}
+
+.dialog-close-button:hover {
+    background-color: rgb(240, 105, 127);
+    color: white;
+}
+
+/* Tray of minimized dialogs, pinned bottom-center over the canvas. */
+#dialog-tray {
+    position: absolute;
+    bottom: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+    max-width: calc(100% - 1rem);
+    /* Container is click-through; only the chips capture events. */
+    pointer-events: none;
+    z-index: 40;
+}
+
+.dialog-tray-chip {
+    pointer-events: auto;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.35rem 0.8rem;
+    border: none;
+    border-radius: 999px;
+    background-color: rgb(240, 105, 127);
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 0.3rem 0.8rem rgba(0, 0, 0, 0.3);
+}
+
+.dialog-tray-chip:hover {
+    background-color: rgb(228, 86, 110);
 }
 
 .center-dialog-content {
