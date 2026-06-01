@@ -113,8 +113,6 @@ const forceRestartButton = document.getElementById("force-restart-button");
 const waitingForOwnerRestart = document.getElementById(
     "waiting-for-owner-restart",
 );
-const currentPainter = document.getElementById("current-painter");
-const currentPainterName = document.getElementById("current-painter-name");
 const wordDialog = document.getElementById("word-dialog");
 const wordPreSelected = document.getElementById("word-preselected");
 const wordButtonContainer = document.getElementById("word-button-container");
@@ -2038,6 +2036,19 @@ const handleReadyEvent = (ready) => {
 
         gameOverScoreboard.innerHTML = "";
 
+        // Show the word that was last being drawn as the first row. It's only
+        // present on the game-over event itself, not on a plain ready/reconnect.
+        if (ready.previousWord) {
+            const lastWordRow = document.createElement("div");
+            lastWordRow.classList.add("gameover-last-word");
+            lastWordRow.innerText = `{{.Translation.Get "last-word"}}: `;
+            const lastWordValue = document.createElement("span");
+            lastWordValue.classList.add("gameover-last-word-value");
+            lastWordValue.innerText = ready.previousWord;
+            lastWordRow.appendChild(lastWordValue);
+            gameOverScoreboard.appendChild(lastWordRow);
+        }
+
         //Copying array so we can sort.
         const players = cachedPlayers.slice();
         players.sort((a, b) => {
@@ -2463,8 +2474,21 @@ function createPlayerStateImageNode(path) {
 
 function updateCurrentPainter() {
     const showPainter = gameState === "ongoing" && drawerName;
-    currentPainter.style.display = showPainter ? "inline-flex" : "none";
-    currentPainterName.innerText = showPainter ? drawerName : "";
+    let painterNode = wordContainer.querySelector(".word-painter-name");
+    if (showPainter) {
+        if (!painterNode) {
+            painterNode = document.createElement("span");
+            painterNode.classList.add("word-painter-name");
+        }
+        // Keep the painter name as the first child, even after the hints
+        // have been re-rendered via replaceChildren.
+        if (painterNode !== wordContainer.firstChild) {
+            wordContainer.insertBefore(painterNode, wordContainer.firstChild);
+        }
+        painterNode.innerText = drawerName;
+    } else if (painterNode) {
+        painterNode.remove();
+    }
 }
 
 function updateRoundsDisplay() {
@@ -2536,6 +2560,9 @@ const applyWordHints = (wordHints, dummy) => {
     lengthHint.setAttribute("dir", wordContainer.getAttribute("dir"));
     lengthHint.innerText = `(${wordLengths.join(", ")})`;
     wordContainer.appendChild(lengthHint);
+
+    // replaceChildren above wipes the painter name, so re-add it.
+    updateCurrentPainter();
 };
 
 const set_dummy_word_hints = () => {

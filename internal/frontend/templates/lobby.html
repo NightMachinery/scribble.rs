@@ -141,10 +141,6 @@
                             </div>
                         </div>
                     </div>
-                    <div id="current-painter" style="display: none;">
-                        <span>{{.Translation.Get "current-painter"}}:</span>
-                        <strong id="current-painter-name"></strong>
-                    </div>
                     <div id="word-container" {{if eq .IsWordpackRtl true}} dir="rtl" {{else}} dir="ltr" {{end}}></div>
                 </div>
                 <div id="time-left">
@@ -434,9 +430,9 @@
             </div>
 
             <div id="chat">
-                <div id="message-container"></div>
                 <input id="message-input" type="text" autocomplete="off"
                     placeholder="{{.Translation.Get "message-input-placeholder"}}" />
+                <div id="message-container"></div>
             </div>
         </div>
     </div>

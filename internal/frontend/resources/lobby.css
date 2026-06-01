@@ -141,31 +141,19 @@ kbd {
     overflow-x: hidden;
 }
 
-#current-painter {
-    align-items: center;
-    background-color: white;
-    border-left: 1px solid rgb(225, 225, 225);
-    font-size: 0.95rem;
-    gap: 0.35rem;
-    padding: 0 0.6rem;
-    white-space: nowrap;
-    display: flex;
-}
-
-#current-painter > span:first-child {
-    color: rgb(92, 92, 92);
-    font-weight: 500;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-#current-painter-name {
+.word-painter-name {
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 12rem;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    align-self: center;
     font-weight: 600;
     color: rgb(240, 105, 127);
+    padding-right: 0.5rem;
+    margin-right: 0.25rem;
+    border-right: 1px solid rgb(225, 225, 225);
 }
 
 .word-length-hint {
@@ -297,8 +285,8 @@ kbd {
     overflow-y: scroll;
     background-color: white;
     flex: 1;
-    border-radius: var(--component-border-radius) var(--component-border-radius)
-        0 0;
+    border-radius: 0 0 var(--component-border-radius)
+        var(--component-border-radius);
 }
 
 .chat-name {
@@ -331,10 +319,10 @@ kbd {
 
 #message-input {
     padding: 10px;
-    margin-top: 5px;
+    margin-bottom: 5px;
     border: 0;
-    border-radius: 0 0 var(--component-border-radius)
-        var(--component-border-radius);
+    border-radius: var(--component-border-radius) var(--component-border-radius)
+        0 0;
 }
 
 .dialog-title {
@@ -702,6 +690,10 @@ kbd {
 #game-over-dialog .center-dialog-content {
     min-height: 0;
     width: min(48rem, 100%);
+    /* Override the shared centering so the scoreboard fills from the top
+    and scrolls, rather than appearing vertically centered on mobile. */
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 #game-over-scoreboard {
@@ -711,6 +703,20 @@ kbd {
     min-height: 0;
     overflow-y: auto;
     width: 100%;
+}
+
+.gameover-last-word {
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: rgb(240, 105, 127);
+    padding: 0.3rem 1rem;
+    margin-bottom: 0.75rem;
+    flex-shrink: 0;
+}
+
+.gameover-last-word-value {
+    color: rgb(60, 60, 60);
 }
 
 .gameover-scoreboard-entry {
@@ -992,18 +998,7 @@ body.mobile-landscape-mode #chat {
     min-height: 8rem;
 }
 
-/* Hide "Painter:" label in landscape mode to save space */
-body.mobile-landscape-mode #current-painter > span:first-child {
-    display: none;
-}
-
-/* Adjust current painter display for landscape */
-body.mobile-landscape-mode #current-painter {
-    padding: 0 0.3rem;
-    font-size: 0.85rem;
-}
-
-/* Prioritize word container over painter name in landscape */
+/* Keep the word box centered and able to use the full header width. */
 body.mobile-landscape-mode #lobby-header-center-element {
     display: flex;
     justify-content: center;
@@ -1017,12 +1012,8 @@ body.mobile-landscape-mode #word-container {
     min-width: 0;
 }
 
-body.mobile-landscape-mode #current-painter {
-    flex: 0 1 auto;
-    min-width: 0;
-}
-
-body.mobile-landscape-mode #current-painter-name {
+/* Shrink the in-box painter name a bit harder in landscape to favour hints. */
+body.mobile-landscape-mode .word-painter-name {
     max-width: 8rem;
 }
 
