@@ -706,6 +706,16 @@ function applyNameRequirementState() {
     }
 }
 
+const toggleFullscreenButton = document.getElementById(
+    "toggle-fullscreen-button",
+);
+
+function updateFullscreenButton() {
+    const active = document.fullscreenElement !== null;
+    toggleFullscreenButton.classList.toggle("header-button-active", active);
+    toggleFullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+}
+
 function toggleFullscreen() {
     if (document.fullscreenElement !== null) {
         document.exitFullscreen();
@@ -713,17 +723,27 @@ function toggleFullscreen() {
         document.body.requestFullscreen();
     }
 }
-document
-    .getElementById("toggle-fullscreen-button")
-    .addEventListener("click", toggleFullscreen);
+toggleFullscreenButton.addEventListener("click", toggleFullscreen);
+// Keep the button state in sync, including when the user exits via Esc.
+document.addEventListener("fullscreenchange", updateFullscreenButton);
+updateFullscreenButton();
 
-async function toggleLandscapeMode() {
-    hideMenu();
-    const enable = !document.body.classList.contains("mobile-landscape-mode");
-    document.body.classList.toggle("mobile-landscape-mode", enable);
-    toggleLandscapeButton.classList.toggle("header-button-active", enable);
-    toggleLandscapeButton.setAttribute("aria-pressed", enable ? "true" : "false");
+// Fullscreen + orientation lock only make sense on actual mobile devices. On
+// touch laptops with a mouse or desktop browsers we keep the layout toggle but
+// don't hijack fullscreen / orientation.
+function isMobile() {
+    return (
+        window.matchMedia("(pointer: coarse)").matches &&
+        window.innerWidth <= 812
+    );
+}
 
+// Applies the fullscreen + orientation side effects of (de)activating landscape
+// mode. Only does anything on mobile.
+async function applyLandscapeSideEffects(enable) {
+    if (!isMobile()) {
+        return;
+    }
     try {
         if (enable) {
             if (document.fullscreenElement === null) {
@@ -738,6 +758,12 @@ async function toggleLandscapeMode() {
     } catch (_error) {
         // Some mobile browsers, notably iOS Safari, do not allow orientation locks.
     }
+}
+
+async function toggleLandscapeMode() {
+    hideMenu();
+    const enable = !document.body.classList.contains("mobile-landscape-mode");
+    await setLandscapeMode(enable);
 }
 toggleLandscapeButton.addEventListener("click", toggleLandscapeMode);
 
@@ -777,20 +803,7 @@ async function setLandscapeMode(enable) {
     toggleLandscapeButton.classList.toggle("header-button-active", enable);
     toggleLandscapeButton.setAttribute("aria-pressed", enable ? "true" : "false");
 
-    try {
-        if (enable) {
-            if (document.fullscreenElement === null) {
-                await document.body.requestFullscreen();
-            }
-            if (screen.orientation && screen.orientation.lock) {
-                await screen.orientation.lock("landscape");
-            }
-        } else if (screen.orientation && screen.orientation.unlock) {
-            screen.orientation.unlock();
-        }
-    } catch (_error) {
-        // Some mobile browsers, notably iOS Safari, do not allow orientation locks.
-    }
+    await applyLandscapeSideEffects(enable);
 }
 
 function showLobbySettingsDialog() {
