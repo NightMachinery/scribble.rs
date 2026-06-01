@@ -1059,17 +1059,17 @@ body.mobile-landscape-mode #toolbox {
 }
 
 /*
- * Desktop (fine pointer, wide viewport): cap the drawing board height so the
- * header, toolbox, guess input and the first chat lines stay visible without
- * scrolling. max-height drives the height and the width is derived from the
- * 16/9 aspect-ratio, so the board shrinks proportionally (never clipped or
- * squished, keeping pointer coordinates accurate).
+ * Desktop (fine pointer, wide viewport): bound the drawing board so the header,
+ * toolbox, guess input and the first chat lines stay visible without scrolling.
+ * We cap the WIDTH (deriving height from the 16/9 aspect-ratio) rather than the
+ * height, because an aspect-ratio box with only absolutely-positioned children
+ * has no intrinsic size to shrink a width:auto from. To keep
+ * height <= (100vh - 24rem), width must be <= that height * 16/9.
  */
 @media only screen and (pointer: fine) and (min-width: 813px) {
     #drawing-board-wrapper {
-        max-height: calc(100vh - 24rem);
-        width: auto;
-        max-width: 100%;
+        width: 100%;
+        max-width: calc((100vh - 24rem) * 16 / 9);
     }
 
     /* Landscape rearrangement is meant for mobile; hide on desktop. */
