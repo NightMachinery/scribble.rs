@@ -65,11 +65,12 @@ Spiderman
 Batman
 Joker
 Harley Quinn
+Superman
+Flash
 Antman
 Cat Woman
 Wonder Woman
 Captain America
-Superman
 Green Lantern
 Thor
 Black Panter
@@ -115,16 +116,16 @@ WallE
 Meet the Robinsons
 Kongfu Panda
 Tai Lung
-Master Shifu
+Shifu
 Oogway
 Mantis
 Big Hero 6
 Incredibles
-MrIncredible
+Mr. Incredible
 Elastigirl
 Dash
 Violet
-Jackjack
+Jack-Jack
 Edna
 Frozone
 Star Wars
@@ -132,6 +133,7 @@ Zootopia
 Robots
 Toy Story
 Woody
+Jessie
 Buzz Lightyear
 Forky
 Cars
@@ -182,14 +184,15 @@ Sam Sparks
 Steve
 Gravity Falls
 Jimmy Neutron
-We Bare Bears
+Cindy
+# We Bare Bears
 Speedy Gonzales
 Ben10
 Popeye the Sailor
 Mask
 Pink Panther
 Barney & Friends
-Ninja Turtles
+TMNT
 Leonardo
 Donatello
 Raphael
@@ -205,8 +208,8 @@ Hades
 Anastasia
 Vicky the Viking
 Rugrats
-Tantan
 Captain Hook
+Tintin
 Captain Haddock
 Prince Charming
 Rick & Morty
@@ -228,3 +231,4 @@ Chicken Run
 Fowler
 Ginger
 Mrs. Tweedy
+Osmosis Jones
