@@ -1,5 +1,6 @@
-Mickey Mouse
-Minnie mouse
+Mickey
+Minnie
+Daffy Duck
 Donald Duck
 Daisy Duck
 Goofy
@@ -8,9 +9,10 @@ Pinocchio
 Dumbo
 Bambie
 Pooh
-Lion king
+Lion King
 Simba
-timon & pumbaa
+Timon
+Pumbaa
 Mufasa
 Robin Hood
 Little John
@@ -19,86 +21,88 @@ Tinker Bell
 Barbie
 Cinderella
 Pocahontas
-snow white
-sleeping beauty
-Little mermaid
+Snow White
+Sleeping Beauty
+Little Mermaid
 101 Dalmations
 Aristocats
 Marry Poppins
 Inspector Gadget
-The princess and the frog
-Lilo & Stitch
+The Princess and the Frog
+Lilo
+Stitch
 Rapunzel
 Aladdin
 Mulan
 Brave
-witch
-soul
+Witch
+Soul
 Moana
 Hercules
-Brother bear
+Brother Bear
 Frozen
 Olaf
 Elsa
 Anna
 Jasmine
-curious George
+Curious George
 Scooby Doo
 Lucky Luke
 Bugs Bunny
-Daffy Duck
 Coyote
-Road runner
+Road Runner
 Tweety
 Sylvester
-Tom & Jerry
-Mr Bean
-Cruella
+Tom
+Jerry
+Mr. Bean
+Cruella Devil
 Maleficent
 Avengers
 Hulk
 Ironman
 Spiderman
-batman
+Batman
 Joker
 Harley Quinn
 Antman
-Cat woman
-wonder woman
+Cat Woman
+Wonder Woman
 Captain America
-superman
-green lantern
+Superman
+Green Lantern
 Thor
-black panter
-black widow
+Black Panter
+Black Widow
 Indiana Jones
 Narnia
-Wreck it ralph
+Wreck-It Ralph
 Guardians of the Galaxy
-zorro
+Zorro
 Tarzan
+Jane
 Deadpool
 Wolverine
-bolt
-elemental
-brave
-coco
+Bolt
+Elemental
+Brave
+Coco
 Pirates of the Caribbean
-Jack sparrow
+Jack Sparrow
 Fiona
 Shrek
 Donkey
 Ice Age
 Sid
 Hunchback of NotreDame
-Emperor's new groove
-Kronk's new groove
+Emperor's New Groove
+Kronk's New Groove
 Monsters Inc
 Sullivan
 Mike Wasowski
-Inside out
-mega mind
-monsters vs aliens
+Inside Out
+Megamind
+Monsters VS Aliens
 Nemo
 Marlin
 Dory
@@ -106,46 +110,46 @@ Up
 AntZ
 Ratatouille
 Gusteau
-Chicken little
+Chicken Little
 WallE
 Meet the Robinsons
 Kongfu Panda
-tai lung
+Tai Lung
 Master Shifu
-Grand Master Oogway
+Oogway
 Mantis
-big hero 6
+Big Hero 6
 Incredibles
 MrIncredible
-elastigirl
-dash
-violet
-jackjack
-Edna Mode
+Elastigirl
+Dash
+Violet
+Jackjack
+Edna
 Frozone
-Star wars
+Star Wars
 Zootopia
 Robots
 Toy Story
 Woody
 Buzz Lightyear
-forky
+Forky
 Cars
 Lightning McQueen
 Mater
 Harry Potter
 Alice
 Dracula
-mummy
-James bond
-sherlock holmes
+Mummy
+James Bond
+Sherlock Holmes
 Hotel Transylvania
 Frankenstein
 Garfield
 Odie
 Simpsons
 Grinch
-peppa pig
+Peppa Pig
 SpongeBob
 Patrick
 Gary
@@ -153,67 +157,74 @@ Plankton
 Squidward
 Sandy Cheeks
 Mr Krabs
-hello kitty
-phineas and ferb
+Hello Kitty
+Phineas and Ferb
+Pat & Mat
 Perry Platypus
-minions
-despicable me
-woody woodpecker
-snoopy
-family guy
-gumball
-pat & mat
-smurfs
+Minions
+Despicable Me
+Woody Woodpecker
+Snoopy
+Family Guy
+Gumball
+Smurfs
 Digimon
-Pokémon
-sonic
+Pokemon
+Sonic
 CatDog
-little pony
-kim possible
-angry birds
-pingu
-cloudy with achance of meatballs
-flint lockwood
-sam sparks
-steve
-Gravity falls
+Little Pony
+Kim Possible
+Angry Birds
+Pingu
+Cloudy With a Chance of Meatballs
+Flint Lockwood
+Sam Sparks
+Steve
+Gravity Falls
 Jimmy Neutron
 We Bare Bears
-speedy Gonzales
+Speedy Gonzales
 Ben10
-popeye the sailor
+Popeye the Sailor
 Mask
-pink panther
+Pink Panther
 Barney & Friends
-ninja turtles
+Ninja Turtles
 Leonardo
 Donatello
 Raphael
 Michelangelo
-splinter
+Splinter
 Baymax
-peter parker
-king kong
+Peter Parker
+King Kong
 Daltons
-mr potato head
-meg hades
+Mr. Potato Head
+Meg
+Hades
 Anastasia
-vicky the viking
-rugrats
+Vicky the Viking
+Rugrats
 Tantan
-Captain hook
-Captain haddock
-prince Charming
-rick & morty
-slinky dog
-emperor zurg
-puss in boots
-seven dwarfs
-mr line
-red ridding hood
-jungle book
-mogli
+Captain Hook
+Captain Haddock
+Prince Charming
+Rick & Morty
+Slinky Dog
+Emperor Zurg
+Puss in Boots
+Seven Dwarfs
+Mr Line
+Red Ridding Hood
+Jungle Book
+Mogli
 Hansel & Gretel
 Thumbelina
-bee movie
-gingerbread man
+Bee Movie
+Gingerbread Man
+Dexter
+Sinbad
+Chicken Run
+Fowler
+Ginger
+Mrs. Tweedy
