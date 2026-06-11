@@ -109,6 +109,13 @@ func StripModifierCharacters(str string) string {
 	return string(buffer)
 }
 
+// IsNonGuessableWordSeparator reports whether character is part of a word's
+// display text, but should not need to be typed for a guess to match.
+func IsNonGuessableWordSeparator(character rune) bool {
+	return character == ' ' || character == '_' || character == '-' || character == '\u200c' ||
+		unicode.IsPunct(character) || unicode.IsSymbol(character)
+}
+
 // CleanText removes all kinds of characters that could disturb the algorithm
 // checking words for similarity.
 func CleanText(str string) string {
@@ -124,17 +131,17 @@ func CleanText(str string) string {
 
 	var changed bool
 	for _, character := range str {
-		if character < utf8.RuneSelf {
-			switch character {
-			case ' ', '-', '_':
-				changed = true
-			default:
-				buffer = append(buffer, byte(character))
-			}
+		if IsNonGuessableWordSeparator(character) {
+			changed = true
 			continue
 		}
 
-		if character == '\u200c' || unicode.Is(unicode.Mn, character) {
+		if character < utf8.RuneSelf {
+			buffer = append(buffer, byte(character))
+			continue
+		}
+
+		if unicode.Is(unicode.Mn, character) {
 			changed = true
 			continue
 		}

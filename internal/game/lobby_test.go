@@ -90,8 +90,8 @@ func Test_RemoveAccents(t *testing.T) {
 		"\t":    "\t",
 		"\r":    "\r",
 		"":      "",
-		"·":     "·",
-		"?:!":   "?:!",
+		"·":     "",
+		"?:!":   "",
 		"ac-ab": "acab",
 		//nolint:gocritic
 		"ac - _ab-- ": "acab",
@@ -1377,4 +1377,93 @@ func TestApplyDrawingTimeEndsElapsedTurnImmediately(t *testing.T) {
 	require.Equal(t, GameOver, lobby.State)
 	require.Empty(t, lobby.CurrentWord)
 	require.Zero(t, lobby.roundStartTime)
+}
+
+func Test_wordHintsShowPunctuationAndSymbols(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       10,
+			Rounds:            2,
+			WordsPerTurn:      1,
+			AssignRandomNames: true,
+		},
+		ScoreCalculation: ChillScoring,
+		words:            []string{"a&b.c=d"},
+	}
+	wordHintEvents := make(map[uuid.UUID][]*WordHint)
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = func(player *Player, message *gws.Broadcaster) error {
+		data := getUnexportedField(reflect.ValueOf(message).Elem().FieldByName("payload")).([]byte)
+		type outgoingEvent struct {
+			Type string          `json:"type"`
+			Data json.RawMessage `json:"data"`
+		}
+		var event outgoingEvent
+		require.NoError(t, json.Unmarshal(data, &event))
+		if event.Type == EventTypeWordChosen {
+			var chosen WordChosen
+			require.NoError(t, json.Unmarshal(event.Data, &chosen))
+			wordHintEvents[player.ID] = chosen.Hints
+		}
+		return nil
+	}
+
+	drawer := lobby.JoinPlayer("Drawer")
+	drawer.Connected = true
+	lobby.OwnerID = drawer.ID
+
+	guesser := lobby.JoinPlayer("Guesser")
+	guesser.Connected = true
+
+	require.NoError(t, lobby.HandleEvent(EventTypeStart, nil, drawer))
+	require.NoError(t, lobby.HandleEvent(EventTypeChooseWord, []byte(`{"data":0}`), drawer))
+
+	hints := wordHintEvents[guesser.ID]
+	require.Len(t, hints, 7)
+
+	for _, index := range []int{1, 3, 5} {
+		require.Equal(t, []rune("a&b.c=d")[index], hints[index].Character)
+		require.False(t, hints[index].Underline)
+	}
+	for _, index := range []int{0, 2, 4, 6} {
+		require.Zero(t, hints[index].Character)
+		require.True(t, hints[index].Underline)
+	}
+}
+
+func Test_wordHintCountIsCappedByRevealableCharacters(t *testing.T) {
+	t.Parallel()
+
+	lobby := &Lobby{
+		EditableLobbySettings: EditableLobbySettings{
+			DrawingTime:       10,
+			Rounds:            2,
+			WordsPerTurn:      1,
+			AssignRandomNames: true,
+		},
+		ScoreCalculation: ChillScoring,
+		words:            []string{"=-=&.=!!"},
+	}
+	lobby.WriteObject = noOpWriteObject
+	lobby.WritePreparedMessage = noOpWritePreparedMessage
+
+	drawer := lobby.JoinPlayer("Drawer")
+	drawer.Connected = true
+	lobby.OwnerID = drawer.ID
+
+	guesser := lobby.JoinPlayer("Guesser")
+	guesser.Connected = true
+
+	require.NoError(t, lobby.HandleEvent(EventTypeStart, nil, drawer))
+	require.NoError(t, lobby.HandleEvent(EventTypeChooseWord, []byte(`{"data":0}`), drawer))
+
+	require.Zero(t, lobby.hintCount)
+	require.Zero(t, lobby.hintsLeft)
+	require.False(t, lobby.revealRandomHint())
+	for _, hint := range lobby.wordHints {
+		require.NotZero(t, hint.Character)
+		require.False(t, hint.Underline)
+	}
 }

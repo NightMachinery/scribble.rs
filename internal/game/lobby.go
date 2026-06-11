@@ -980,7 +980,7 @@ func (lobby *Lobby) resolvePlayerName(name string, rejectEmpty bool) (string, bo
 }
 
 func isAlwaysVisibleHintCharacter(char rune) bool {
-	return char == ' ' || char == '_' || char == '-' || char == '\u200c'
+	return sanitize.IsNonGuessableWordSeparator(char)
 }
 
 func (lobby *Lobby) calculateGuesserScore() int {
@@ -1041,15 +1041,21 @@ func (lobby *Lobby) revealRandomHint() bool {
 		return false
 	}
 
-	for {
-		randomIndex := rand.Int() % len(lobby.wordHints)
-		if lobby.wordHints[randomIndex].Character == 0 {
-			lobby.wordHints[randomIndex].Character = []rune(lobby.CurrentWord)[randomIndex]
-			lobby.wordHints[randomIndex].Revealed = true
-			lobby.wordHintsShown[randomIndex].Revealed = true
-			return true
+	hiddenIndexes := make([]int, 0, len(lobby.wordHints))
+	for index, hint := range lobby.wordHints {
+		if hint.Character == 0 {
+			hiddenIndexes = append(hiddenIndexes, index)
 		}
 	}
+	if len(hiddenIndexes) == 0 {
+		return false
+	}
+
+	randomIndex := hiddenIndexes[rand.IntN(len(hiddenIndexes))]
+	lobby.wordHints[randomIndex].Character = []rune(lobby.CurrentWord)[randomIndex]
+	lobby.wordHints[randomIndex].Revealed = true
+	lobby.wordHintsShown[randomIndex].Revealed = true
+	return true
 }
 
 func (lobby *Lobby) broadcastWordHints() {
@@ -1084,14 +1090,18 @@ func (lobby *Lobby) revealOverdueHints(currentTime int64) bool {
 		return false
 	}
 
+	changed := false
 	for revealedHints < desiredRevealedHints {
 		if !lobby.revealRandomHint() {
-			break
+			lobby.hintCount = revealedHints
+			lobby.hintsLeft = 0
+			return changed
 		}
+		changed = true
 		revealedHints++
 	}
 	lobby.hintsLeft = max(0, lobby.hintCount-revealedHints)
-	return true
+	return changed
 }
 
 func (lobby *Lobby) recalculateCurrentRoundGuesses() {
@@ -1408,9 +1418,12 @@ func (lobby *Lobby) tickLogic(expectedTicker *time.Ticker) bool {
 		revealHintAtXOrLower := revealHintEveryXMilliseconds * int64(lobby.hintsLeft)
 		timeLeft := lobby.roundEndTime - currentTime
 		if timeLeft <= revealHintAtXOrLower {
-			lobby.hintsLeft--
-			lobby.revealRandomHint()
-			lobby.broadcastWordHints()
+			if lobby.revealRandomHint() {
+				lobby.hintsLeft--
+				lobby.broadcastWordHints()
+			} else {
+				lobby.hintsLeft = 0
+			}
 		}
 	}
 
@@ -1574,13 +1587,12 @@ func (lobby *Lobby) selectWord(index int) error {
 	} else {
 		lobby.hintCount = 3
 	}
-	lobby.hintsLeft = lobby.hintCount
-
 	// We generate both the "empty" word hints and the hints for the
 	// drawer. Since the length is the same, we do it in one run.
 	lobby.wordHints = make([]*WordHint, 0, runeCount)
 	lobby.wordHintsShown = make([]*WordHint, 0, runeCount)
 
+	revealableHintCount := 0
 	for _, char := range lobby.CurrentWord {
 		// These characters are part of the word, but aren't relevant for the
 		// guess. In order to make the word hints more useful to the
@@ -1605,8 +1617,11 @@ func (lobby *Lobby) selectWord(index int) error {
 			lobby.wordHints = append(lobby.wordHints, &WordHint{
 				Underline: true,
 			})
+			revealableHintCount++
 		}
 	}
+	lobby.hintCount = min(lobby.hintCount, revealableHintCount)
+	lobby.hintsLeft = lobby.hintCount
 
 	timeLeft := int(lobby.roundEndTime - getTimeAsMillis())
 	if lobby.paused && !lobby.pauseStartedAt.IsZero() {
