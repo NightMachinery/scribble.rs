@@ -53,16 +53,20 @@ The following characters are treated as always-visible separators:
 - space: `' '`
 - underscore: `'_'`
 - dash: `'-'`
+- Persian halfspace / zero-width non-joiner: `'\u200c'`
+- all Unicode punctuation and symbol characters, such as `&`, `.`, `=`, `?`, `!`, `★`, and `؟`
 
 They are inserted into both hint arrays immediately and are not underlined.
 
 Everything else starts hidden for guessers and spectators.
 
-Example:
+Examples:
 
 - word: `Pac-Man`
 - initial guesser view: `_ _ _ - _ _ _`
 - initial drawer view: `P a c - M a n`
+- word: `a&b.c=d`
+- initial guesser view: `_ & _ . _ = _`
 
 ## How many hints a word gets
 
@@ -167,7 +171,7 @@ Client code: `internal/frontend/lobby.js`
 
 - `Character == 0` -> blank underlined placeholder
 - visible character + `Underline == true` -> underlined visible character
-- visible character + `Underline == false` -> separator such as space/dash/underscore
+- visible character + `Underline == false` -> separator such as space/dash/underscore/punctuation/symbol
 
 The client also appends a compact word-length indicator like:
 
@@ -208,11 +212,12 @@ Code path:
 - dashes
 - underscores
 - zero-width non-joiners
+- Unicode punctuation and symbols
 - combining modifier marks such as the Persian/Arabic hamza above in `بوسهٔ`
 
 It also transliterates some accented characters.
 
-That means the always-visible separators are only visual aids; players do not need to type them exactly for a guess to count.
+That means the always-visible separators are only visual aids; players do not need to type them exactly for a guess to count. For example, `ab c`, `a-b_c`, and `a&b.c=d` can be guessed without typing the visible separator characters.
 
 By default, a guess is accepted as correct when its edit distance is within
 `round(0.25 * len(normalizedTargetWord))`. This is a per-lobby setting:
